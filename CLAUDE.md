@@ -69,21 +69,23 @@ firing (it ran, +5.1 s, but the raid ended before the next wave). Victim kill ti
 - Duplicate check (`Core.DuplicateCheck`): every save checks that each item id is in one place (player, one bot,
   world); the capture line says "no duplicate items" or names them.
 
-**Next: C, the server mod and the lock.** Not started. Without it a player can change their stash, gear, traders or
+**Next: C, the server mod and the lock.** Started 2026-11-06 on branch `c-server` (from `b2-bots`). Without it a player can change their stash, gear, traders or
 quests between Save & Quit and the resume, and the resume brings the saved kit back: duplication (raid end replaces
 equipment only, never the stash) or lost gear, and quest progress overwritten by the save's. Scope (docs/DESIGN.md,
 Joel's decisions above): save storage beside the profile; while a save exists, the profile is locked (traders,
 flea, hideout transfers, mail, other raids) and the menu offers only Resume or Abandon; Abandon resolves as MIA and
-a combat save as Killed, both without loading the raid (send `local/end` built from the save); a hard exit scraps the
+a combat save as Killed, both by loading the raid and ending it (see the decision below); a hard exit scraps the
 raid as standard SPT does, and a save used up on Ready is discarded and the profile unlocked on next launch. Plan,
 riskiest first:
-1. Before writing code, check the SPT 4.1 server mod API against real code: how ABPS (`acidphantasm-botplacementsystem`)
-   and ORBIT (`Orbit.Server.dll`) register (`[Injectable]`, `IOnLoad`, `StaticRouter`/`RouteAction`, `AbstractPatch`),
-   and which server routes change the profile out of raid (inventory moves and trades, ragfair, hideout, mail,
-   `/client/match/local/start` on another map), so the lock refuses each; and how the client shows a refused action.
-   Decompile `SPTarkov.Server.Core.dll` in `H:\SPT4.1.X\SPT_Runtime` with ilspycmd.
-2. The resolve path: build `EndLocalRaidRequestData` from a save (Killed or MIA) and run it through the server's
-   own `EndLocalRaidAsync`, so death and MIA apply exactly as normal.
+1. **Done 2026-11-06:** server mod API, lock points and the raid-end path, checked in decompiled code:
+   docs/C-SERVER-API.md. A mod router can't refuse a request (every matching router runs, the core's first), so the
+   lock is Harmony prefixes: `ItemEventCallbacks.HandleEvents` covers every item event; also `local/start` (other
+   maps), `scavsave`, `prestige/obtain`, `savage/regenerate`. Open: how the client shows a refused item event;
+   which of `SPTarkov.Server.Core.dll` / `.Patched.dll` the server loads.
+2. The resolve path, **load then end** (Joel, 2026-11-06): behind the loading screen, run the normal resume, then
+   call the game's own `GameEnd` with Killed or MIA before Ready. Reason: `Player.OnGameSessionEnd` (session XP into
+   `Info.Experience`, death/MIA counters, quest exit and fail conditions through `ConditionalBook`) needs a live player
+   and the save is captured before it; a raw server-side `EndLocalRaidAsync` from the save would skip all of it.
 3. Lock, menu (Resume / Abandon only) and storage.
 Then D (pause-menu button, Ready to Resume prompt, version and mod-list checks, release).
 
@@ -106,7 +108,9 @@ Target install: `H:\SPT4.1.X` (SPT 4.1.6, EFT 0.16.9.40743). Repo https://github
 
 ## Decisions (Joel, 2026-11-06)
 
-- Save in combat resolves as Killed on next launch. Abandon is MIA. Both resolve without loading the raid.
+- Save in combat resolves as Killed on next launch. Abandon is MIA. Both resolve by loading the raid behind the
+  loading screen and ending it through the game's own `GameEnd` (changed from "without loading" on 2026-11-06, so
+  XP, counters and fail-on-death quests apply exactly as normal).
 - Hard exit (Alt-F4, crash) scraps the raid like standard SPT. A save is used up on Ready to Resume.
 - No combat continuity: restored bots start fresh. Don't add awareness seeding.
 

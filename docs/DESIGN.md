@@ -13,8 +13,8 @@ dying applies normal SPT progression once.
 | What happens | Result |
 |---|---|
 | Save & Exit, not in combat | Resume restores the raid exactly as below |
-| Save & Exit in combat | Confirmation first; the raid resolves as **Killed** on next launch, without loading |
-| Abandon (from the locked menu) | The raid resolves as **MIA**, without loading |
+| Save & Exit in combat | Confirmation first; the raid resolves as **Killed** on next launch (loaded behind the loading screen and ended there) |
+| Abandon (from the locked menu) | The raid resolves as **MIA** (loaded behind the loading screen and ended there) |
 | Hard exit (Alt-F4, crash) in any raid | The raid is scrapped exactly like standard SPT: no penalty, profile stays pre-raid. A save used by Resume is gone. |
 
 "In combat": a living bot sees you now, or saw or shot at you within 30 s (configurable). A bot that only knows
