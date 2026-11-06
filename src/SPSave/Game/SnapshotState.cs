@@ -43,6 +43,14 @@ namespace SPSave.Game
         public float Oxygen;
         public string HandsItemId;
         public string HandsItemTemplate;
+        /// <summary>Items on the player marked found in raid; the resume compares the restored profile with this.</summary>
+        public int FoundInRaidItems;
+        /// <summary>Every item on the player; the resume checks the rebuilt profile against it.</summary>
+        public List<SPSave.Core.ItemRecord> Items = new List<SPSave.Core.ItemRecord>();
+        /// <summary>Containers the player had searched (PlayerSearchController._searchedItems), by item id.</summary>
+        public List<string> Searched = new List<string>();
+        /// <summary>Items the player had seen inside searchable containers (ActiveSearchController._knownItems), by id.</summary>
+        public List<string> Known = new List<string>();
         public List<EffectState> Effects = new List<EffectState>();
     }
 
@@ -79,6 +87,9 @@ namespace SPSave.Game
         public float WorkStateTime;
         public float ResidueStateTime;
         public float Strength;
+        /// <summary>PainKiller only: the medicine that gave it and its full duration (both runtime-only on the effect).</summary>
+        public string ItemTemplateId;
+        public float MaxDuration;
     }
 
     public sealed class DoorState
@@ -86,6 +97,8 @@ namespace SPSave.Game
         public string Id;
         public string Kind;
         public int State;
+        /// <summary>Door.IsBroken: breached. Restored through Door.SetInitialSyncState.</summary>
+        public bool Broken;
     }
 
     public sealed class ClockState

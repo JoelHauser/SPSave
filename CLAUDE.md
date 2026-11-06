@@ -8,7 +8,24 @@ never call it release-ready before in-game checks.
 
 Step A (capture spike) done in game 2026-11-06 on Factory, Customs and Streets: results in docs/STEP-A-RESULTS.md.
 Real save ~80–90 ms on Streets; no measurable normal-play cost (one off/on pair, not four: Joel won't do long runs).
-Open: name the skipped loot entries (current build logs them). Next: Step B (restore).
+Open: name the skipped loot entries (current build logs them).
+B1 (resume player and world, no bots) built 2026-11-06, **not yet run in game**. Starting a PMC raid on the save's
+map resumes it; frozen until Ctrl+F11; the save is retired to `used\<stamp>\` on Ready. Test: docs/TEST-PLAN.md (B1).
+
+## How the resume hooks in (B1)
+
+`LocalGameMatchingPatch` (prefix on `TarkovApplication.LocalGameMatching`, which preloads `Session.Profile.GetAllPrefabPaths()` before `LocalGameCreate`; swapping later left saved gear unloaded: no weapon, broken model) loads the save and sets
+`Session.Profile = new Profile(saved descriptor)` (the setter is on `ClientBackendSession`; after a raid the client
+reloads the profile with `Session.GetProfiles`, carrying only `EftStats` across). Then: `GameTimer.Start` gets
+startTime = now − played; `LocalGame.vmethod_1` gets `BotAmount = NoBots` (`BotsController._canSpawn` false);
+`BaseLocalGame.SpawnLoot` gets the saved `location.Loot`; `GameWorld.SpawnLoot` postfix puts saved FIR flags back;
+`Profile.SetSpawnedInSession(false)` and `RemoveUsedLocationKeycard` are skipped; `vmethod_6` keeps `_entryPoint` and
+skill fatigue, then `RaidRestore` places the player and sets effects, doors (`SetInitialSyncState`), weather (private
+`backendWeatherCurve`, bypassing `SetWeatherNodes` because Forecaster rewrites its nodes) and time
+(`GameDateTime.ResetForce`). `PrefabPathsPatch` adds corpse head/clothing bundles to that preload (else "usec_head_5.bundle is not loaded", no bodies). `ReadyController` freezes through `Freeze` (Pause mod's method, patches installed only while frozen: timeScale 0 alone let player updates run with dt 0 and broke the camera and collisions), stops time only after PreloaderUI's black overlay fades (it steps by `Time.deltaTime`), and, on Ready, shifts the timer and
+`MainTimerPanel._dateTime` by the frozen time (Pause mod's method).
+The in-raid `ActiveHealthController` ignores `UpdateTime`, so time away doesn't regenerate health. Corpses load their
+own customization (`Corpse.Init` → `InitBody`).
 
 Target install: `H:\SPT4.1.X` (SPT 4.1.6, EFT 0.16.9.40743). Repo https://github.com/JoelHauser/SPSave.git.
 
@@ -46,7 +63,19 @@ Decompile with `ilspycmd` (global tool) when a new API is needed; never guess me
   The descriptor clones `profile.Health`, which is pre-raid: set `Health = ActiveHealthController.Store()`.
 - `Store()` keeps only `IRestorable` effects and drops most timers. Capture timings from `ActiveHealthController.Effects`
   and rebuild with `AddEffect<T>(part, delay, work, residue, strength)`.
-- World: `ItemBinarySerializer.SerializeLootData`/`DeserializeLootData`, `Write/ReadEFTLootDataDescriptor`,
+- World loot is saved as JSON through `LootItemSerializer` (`JsonLootItem[]`, flat items named by `slotId`, corpses
+  come back as `JsonCorpse`): see `WorldLoot`. **Not** the binary `ItemDescriptor` path: it stores grids by index
+  (`GridDescriptor.GridNumber`), and a live rig on a corpse had two containers its template lacks, so a magazine
+  landed in the wrong grid and `Grid.AddItemWithoutRestrictions` parked it outside (lost; "doesn't fit to grid" in
+  EFT's errors.log).
+- Profiles are saved as JSON too (`ProfileCodec`): binary `WriteEFTProfileDescriptor` carries the inventory as an
+  index-based `ItemDescriptor` tree that `ToInventory` prefers; Joel's rig had one extra container, so every grid's
+  contents shifted down one on rebuild. JSON `InventoryDescriptor` flattens the live `_inventory` to `FlatItem[]`
+  (`OnJSONSerializing`), the form SPT sends at raid end. Mod items can name grids oddly ("GridView (5)" on a
+  Pack 'n' Strap-style armband); by-name rebuild handles that.
+- Save & Quit rebuilds the profile from the written file and compares every item on the player (`InventoryCheck`);
+  any loss refuses the save.
+- (Old notes) World: `ItemBinarySerializer.SerializeLootData`/`DeserializeLootData`, `Write/ReadEFTLootDataDescriptor`,
   `JsonCorpse` with `Bones` from `Corpse.GetTransformSync()` (`TransformSyncs` is cached). `GameWorld.SpawnLoot` loads it;
   containers match by `IStaticLoot.Id`. Use `FullySearchedSearchController.Instance`: other controllers drop the contents of
   unsearched containers.

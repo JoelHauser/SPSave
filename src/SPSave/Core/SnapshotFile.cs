@@ -212,6 +212,29 @@ namespace SPSave.Core
             return null;
         }
 
+        /// <summary>
+        /// Takes a save out of play once a resume has used it: the save and any ".tmp" or ".prev" move into
+        /// used\&lt;stamp&gt;\ beside it, so <see cref="LoadNewestValid"/> no longer finds anything. Returns that folder,
+        /// or null if there was nothing to move.
+        /// </summary>
+        public static string Retire(string path, DateTime utcNow)
+        {
+            var directory = Path.GetDirectoryName(Path.GetFullPath(path)) ?? "";
+            var target = Path.Combine(directory, "used", utcNow.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture));
+            var moved = false;
+            foreach (var candidate in new[] { path, path + TempSuffix, path + PrevSuffix })
+            {
+                if (!File.Exists(candidate))
+                {
+                    continue;
+                }
+                Directory.CreateDirectory(target);
+                File.Move(candidate, Path.Combine(target, Path.GetFileName(candidate)));
+                moved = true;
+            }
+            return moved ? target : null;
+        }
+
         private static byte[] ReadExactly(BinaryReader reader, int length)
         {
             if (length < 0)

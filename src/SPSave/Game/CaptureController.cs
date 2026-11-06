@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Diagnostics;
 using System.IO;
 using EFT;
@@ -9,12 +10,18 @@ using UnityEngine;
 namespace SPSave.Game
 {
     /// <summary>
-    /// Step A only: a hotkey that captures the raid to disk, reads it back and reports timings. It restores nothing
-    /// and never ends the raid. Its Update is the mod's only per-frame code: one key check (the shipped mod will use
-    /// a pause-menu button instead and have none).
+    /// Save &amp; Quit on a hotkey (the pause-menu button comes later): capture the raid, write it, read it back, and
+    /// close the game. Quitting means GameEnd never runs, so the server gets no raid end: no extract, death or MIA.
+    /// Refused in combat for now; Joel's rule (a combat save resolves as Killed) needs the server mod (Step C).
+    /// Its Update is the mod's only per-frame code during play: one key check.
     /// </summary>
     internal sealed class CaptureController : MonoBehaviour
     {
+        /// <summary>Set once a save is confirmed and the game is closing; RaidEndPatch must not discard that save.</summary>
+        internal static bool Quitting;
+
+        private bool _busy;
+
         internal static void Attach(GameWorld world)
         {
             if (world.GetComponent<CaptureController>() == null)
@@ -23,23 +30,41 @@ namespace SPSave.Game
             }
         }
 
+        private void OnDestroy()
+        {
+            // The raid is over: whatever a resume left behind no longer applies.
+            ResumeSession.Reset();
+        }
+
         private void Update()
         {
-            if (Plugin.CaptureKey.Value.IsDown())
+            if (!_busy && Plugin.CaptureKey.Value.IsDown())
             {
-                Capture();
+                SaveAndQuit();
             }
         }
 
-        private static void Capture()
+        private void SaveAndQuit()
         {
+            if (ResumeSession.Phase == ResumePhase.WaitingForReady)
+            {
+                NotificationManager.DisplayWarningNotification("SPSave: take control first (Ctrl+F11), then save.");
+                return;
+            }
+
             var frame = Stopwatch.StartNew();
             try
             {
                 var result = RaidCapture.Run(Plugin.CombatWindowSeconds.Value);
                 var report = result.Report;
+                if (report.InCombat)
+                {
+                    Plugin.Log.LogInfo("Save refused: " + report.CombatDetail);
+                    NotificationManager.DisplayWarningNotification("SPSave: you're in combat. Break contact for 30 seconds, then save.");
+                    return;
+                }
 
-                var path = Path.Combine(Plugin.SaveRoot, "saves", result.ProfileId, "raid.spsave");
+                var path = Plugin.SavePath(result.ProfileId);
                 var write = SnapshotFile.Write(path, result.Sections);
                 report.RawBytes = write.RawBytes;
                 report.FileBytes = write.FileBytes;
@@ -50,7 +75,7 @@ namespace SPSave.Game
                 if (Plugin.VerifyRoundTrip.Value)
                 {
                     var watch = Stopwatch.StartNew();
-                    var check = RoundTrip.Verify(SnapshotFile.Read(path), result.WorldItemIds);
+                    var check = RoundTrip.Verify(SnapshotFile.Read(path), result.WorldItemIds, result.WorldItems, report.Corpses);
                     report.RoundTripMs = watch.Elapsed.TotalMilliseconds;
                     report.RoundTripOk = check.Ok;
                     report.RoundTripDetail = check.Detail;
@@ -61,25 +86,35 @@ namespace SPSave.Game
                     report.RoundTripDetail = "skipped";
                 }
                 report.FrameMs = frame.Elapsed.TotalMilliseconds;
-
                 CaptureReport.AppendTo(Path.Combine(Plugin.SaveRoot, "captures.csv"), report);
                 Plugin.Log.LogInfo("Captured " + report.Summary());
-                if (report.RoundTripOk)
+
+                if (!report.RoundTripOk)
                 {
-                    NotificationManager.DisplayMessageNotification(
-                        $"SPSave: captured in {report.FrameMs:F0} ms, {report.FileBytes / 1024} KB" + (report.InCombat ? " (in combat)" : ""));
+                    // A save that doesn't read back must never be resumed.
+                    SnapshotFile.Retire(path, DateTime.UtcNow);
+                    Plugin.Log.LogWarning("Round trip failed, save discarded: " + report.RoundTripDetail);
+                    NotificationManager.DisplayWarningNotification("SPSave: the save didn't check out, so it was discarded. Your raid continues.");
+                    return;
                 }
-                else
-                {
-                    Plugin.Log.LogWarning("Round trip failed: " + report.RoundTripDetail);
-                    NotificationManager.DisplayWarningNotification("SPSave: captured, but the round trip failed. See the BepInEx log.");
-                }
+
+                Quitting = true;
+                _busy = true;
+                NotificationManager.DisplayMessageNotification("SPSave: raid saved. Closing the game...");
+                StartCoroutine(QuitSoon());
             }
             catch (Exception e)
             {
-                Plugin.Log.LogError("Capture failed: " + e);
-                NotificationManager.DisplayWarningNotification("SPSave: capture failed. See the BepInEx log.");
+                Plugin.Log.LogError("Save failed: " + e);
+                NotificationManager.DisplayWarningNotification("SPSave: the save failed. Your raid continues. See the BepInEx log.");
             }
+        }
+
+        private static IEnumerator QuitSoon()
+        {
+            yield return new WaitForSecondsRealtime(2f);
+            Plugin.Log.LogInfo("Closing the game after Save & Quit.");
+            Application.Quit();
         }
     }
 }

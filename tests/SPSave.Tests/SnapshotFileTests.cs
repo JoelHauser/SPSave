@@ -127,6 +127,21 @@ namespace SPSave.Tests
             Assert.Equal(1, problems.Count, "the bad file is reported");
         }
 
+        public static void RetireTakesEverySaveFileOutOfPlay()
+        {
+            using var dir = new TempDir();
+            var path = dir.File("raid.spsave");
+            SnapshotFile.Write(path, Sections("first"));
+            SnapshotFile.Write(path, Sections("second"));
+            File.WriteAllBytes(path + SnapshotFile.TempSuffix, new byte[] { 1 });
+
+            var target = SnapshotFile.Retire(path, new DateTime(2026, 11, 6, 17, 0, 0, DateTimeKind.Utc));
+            Assert.True(SnapshotFile.LoadNewestValid(path, out _, new List<string>()) == null, "nothing left to resume");
+            Assert.Equal(3, Directory.GetFiles(target).Length, "save, .prev and .tmp moved");
+            Assert.True(target.EndsWith(Path.Combine("used", "20261106-170000")), "stamped folder");
+            Assert.True(SnapshotFile.Retire(path, DateTime.UtcNow) == null, "second retire finds nothing");
+        }
+
         public static void FailedWriteLeavesCurrentSaveAlone()
         {
             using var dir = new TempDir();

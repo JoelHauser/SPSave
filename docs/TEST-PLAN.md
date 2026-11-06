@@ -1,3 +1,25 @@
+# B1: resume your character and the world (no bots)
+
+About 10 minutes. **Ctrl+F10 is Save & Quit**: it saves, checks the save, and closes the game. The server never
+hears the raid end, so there is no MIA and your kit is safe. It refuses while you're in combat (for now).
+
+**First raid, Factory (day), bots on as normal:**
+
+1. Loot something. Open a door that starts closed. Kill a scav if one comes along. Firing part of a magazine and
+   taking a bleed are a bonus.
+2. Get out of contact, note the raid timer, then press **Ctrl+F10**. The game closes. The server can keep running.
+
+**Relaunch the game and start Factory (day).** You should get "SPSave: resuming your saved raid on factory4_day",
+then the game loads frozen with "Raid restored. Everything is paused."
+
+3. **Before pressing anything:** same spot and facing; the door open; the scav's body where it fell; the timer showing
+   the time you noted. No bots (B1 doesn't restore them).
+4. Press **Ctrl+F11** to take control. Check the magazine and your health.
+5. Extract or Leave, then "check the logs". The log checks found-in-raid for you.
+
+Extracting, dying or leaving discards any save made in that raid, so the next Factory raid is fresh. A save is also
+used up when you press Ctrl+F11.
+
 # Step A: in-game checks
 
 Step A captures a raid to disk and reads it back. It restores nothing and never ends the raid, so a raid with

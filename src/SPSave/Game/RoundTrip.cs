@@ -24,25 +24,24 @@ namespace SPSave.Game
     /// </summary>
     internal static class RoundTrip
     {
-        public static RoundTripResult Verify(Dictionary<string, byte[]> sections, HashSet<string> liveWorldIds)
+        public static RoundTripResult Verify(Dictionary<string, byte[]> sections, HashSet<string> liveWorldIds,
+            Dictionary<string, KeyValuePair<EFT.InventoryLogic.Item, string>> liveItems = null, int expectedCorpses = -1)
         {
             var problems = new List<string>();
             var profiles = 0;
 
             foreach (var section in sections)
             {
-                if (section.Key != RaidCapture.PlayerSection && !section.Key.StartsWith(RaidCapture.BotSectionPrefix, StringComparison.Ordinal))
+                if (!ProfileCodec.IsProfileSection(section.Key))
                 {
                     continue;
                 }
                 profiles++;
                 try
                 {
-                    var descriptor = new NetworkReader(new ArraySegment<byte>(section.Value)).ReadEFTProfileDescriptor();
-                    var again = RaidCapture.Binary(w => w.WriteEFTProfileDescriptor(descriptor));
-                    if (!section.Value.SequenceEqual(again))
+                    if (ProfileCodec.Read(section.Key, section.Value) == null)
                     {
-                        problems.Add($"{section.Key} re-encodes to {again.Length} bytes, saved {section.Value.Length}");
+                        problems.Add($"{section.Key} reads back empty");
                     }
                 }
                 catch (Exception e)
@@ -52,21 +51,23 @@ namespace SPSave.Game
             }
 
             var worldIds = 0;
-            if (sections.TryGetValue(RaidCapture.LootSection, out var lootBytes))
+            if (WorldLoot.Has(sections))
             {
                 try
                 {
-                    var descriptor = new NetworkReader(new ArraySegment<byte>(lootBytes)).ReadEFTLootDataDescriptor();
-                    var again = RaidCapture.Binary(w => w.WriteEFTLootDataDescriptor(descriptor));
-                    if (!lootBytes.SequenceEqual(again))
-                    {
-                        problems.Add($"world loot re-encodes to {again.Length} bytes, saved {lootBytes.Length}");
-                    }
-
+                    var loot = WorldLoot.Read(sections);
                     var ids = new HashSet<string>(StringComparer.Ordinal);
-                    foreach (var entry in ItemBinarySerializer.DeserializeLootData(descriptor))
+                    foreach (var entry in loot)
                     {
                         RaidCapture.AddIds(entry.Item, ids);
+                    }
+                    if (expectedCorpses >= 0)
+                    {
+                        var corpses = loot.Count(entry => entry is JsonType.JsonCorpse);
+                        if (corpses != expectedCorpses)
+                        {
+                            problems.Add($"{corpses} corpses read back, {expectedCorpses} saved");
+                        }
                     }
                     worldIds = ids.Count;
                     var missing = liveWorldIds.Count(id => !ids.Contains(id));
@@ -74,6 +75,16 @@ namespace SPSave.Game
                     if (missing > 0 || extra > 0)
                     {
                         problems.Add($"world items differ from live: {missing} missing, {extra} extra");
+                        if (liveItems != null)
+                        {
+                            foreach (var id in liveWorldIds.Where(id => !ids.Contains(id)).Take(10))
+                            {
+                                if (liveItems.TryGetValue(id, out var live))
+                                {
+                                    Plugin.Log.LogWarning("Lost in the save: " + Describe(live.Key) + ", " + live.Value);
+                                }
+                            }
+                        }
                     }
                 }
                 catch (Exception e)
@@ -88,6 +99,24 @@ namespace SPSave.Game
 
             TryParse<Manifest>(sections, RaidCapture.ManifestSection, problems);
             TryParse<RaidState>(sections, RaidCapture.StateSection, problems);
+
+            // The profile must rebuild with every item on the player where it was: a resume builds it the same way.
+            try
+            {
+                if (sections.TryGetValue(RaidCapture.PlayerJsonSection, out var playerBytes) && sections.TryGetValue(RaidCapture.StateSection, out var stateBytes))
+                {
+                    var state = JsonConvert.DeserializeObject<RaidState>(Encoding.UTF8.GetString(stateBytes));
+                    var descriptor = ProfileCodec.Read(RaidCapture.PlayerJsonSection, playerBytes);
+                    if (!RaidCapture.CheckInventory("Save check", state?.Player?.Items, new Profile(descriptor)))
+                    {
+                        problems.Add("the profile rebuilds with different items (see the lines above)");
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                problems.Add($"the profile does not rebuild: {e.Message}");
+            }
             if (sections.TryGetValue(RaidCapture.WeatherSection, out var weatherBytes))
             {
                 try
@@ -111,6 +140,14 @@ namespace SPSave.Game
                     ? $"{profiles} profiles and {worldIds} world items round-trip"
                     : string.Join("; ", problems)
             };
+        }
+
+        private static string Describe(EFT.InventoryLogic.Item item)
+        {
+            var container = item.CurrentAddress?.Container;
+            var parent = container?.ParentItem;
+            return $"{item.Id} {item.TemplateId} '{item.ShortName}' ({item.GetType().Name}) in '{container?.ID}' " +
+                   $"({container?.GetType().Name}) of {parent?.TemplateId} '{parent?.ShortName}' ({parent?.GetType().Name})";
         }
 
         private static void TryParse<T>(Dictionary<string, byte[]> sections, string name, List<string> problems)
