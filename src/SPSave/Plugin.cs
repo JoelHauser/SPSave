@@ -16,7 +16,7 @@ namespace SPSave
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string Guid = "com.joelhauser.spsave";
-        public const string Version = "0.4.2";
+        public const string Version = "0.5.0";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<KeyboardShortcut> CaptureKey;
@@ -63,6 +63,9 @@ namespace SPSave
             new SpawnedInSessionPatch().Enable();
             new KeycardPatch().Enable();
             new GameStartPatch().Enable();
+            new BeginStatisticsSessionPatch().Enable();
+            new TransitContinuePatch().Enable();
+            new ManageGameQuestsPatch().Enable();
             new RaidEndPatch().Enable();
         }
     }

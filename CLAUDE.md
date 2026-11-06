@@ -1,6 +1,6 @@
 # SPSave (Save & Resume Raid): working notes for Claude
 
-SPT client mod (server mod to come): save a raid, quit, resume it later. Design and player promises:
+SPT client mod (server mod next, step C): save a raid, quit, resume it later. Design and player promises:
 docs/DESIGN.md. Joel's priorities: zero cost during normal play; verified APIs only (no invented class names);
 never call it release-ready before in-game checks.
 
@@ -14,7 +14,7 @@ loot, bodies, doors, magazines (106/106 items), searched bodies, on-screen timer
 Save & Quit; starting a PMC raid on the save's map resumes it, frozen until Ctrl+F11; the save is retired to
 `used\<stamp>\` on Ready. Merged to main (`ba9aeb7`).
 
-**Now: B2, living bots.** Plan, riskiest first:
+**B2, living bots: done 2026-11-06** (0.4.2, committed on branch `b2-bots`, not merged to main):
 1. **Done 2026-11-06:** SAIN, ABPS and ORBIT checked against their code: docs/B2-COMPAT.md. Nothing blocks. SAIN
    attaches to any bot (`BotOwner.PreActivate`) but re-rolls personality; ABPS PMCs are boss waves that the server
    regenerates only on `local/end`, and the game restarts every wave timer from zero on resume. ORBIT's sleeping
@@ -46,12 +46,46 @@ Save & Quit; starting a PMC raid on the save's map resumes it, frozen until Ctrl
    `BotsSpawnedPerPlayer` is restored. `FreshSpawnGate` now holds only when a save has no waves (before 0.4.0).
    Known gaps: a boss wave activated but still in its `Delay` at save is lost; `Init` re-rolls the difficulty of
    `Supports` escorts; Halloween zombie events aren't handled.
-4. Test on Factory with living scavs: same bots (profile ids), same places, same gear; then a second save and resume.
 Bots come back unaware of the player (Joel's decision; combat saves are refused).
 
-After B2: B3 (second save/resume of the same raid, extraction applies progress once, duplicate check), then C (server
-mod: save storage, profile lock, Resume Raid button, Abandon = MIA, combat save = Killed), then D (pause-menu button,
-version and mod-list checks, release).
+**B3, repeat and finish: done 2026-11-06** (0.5.0, Joel's call). Passed in game with one save, one resume and an extraction
+(Factory): resume logged "1157 session XP so far, 3 kills, 3 on the kill list"; after extracting, the server profile
+had Kills 8 (3 + 5), all 8 victims, XP counters from both sessions, the survived bonus and Sessions +1 once; the
+save had 1,410 item ids and no duplicates. Not yet seen: a second save of a resumed raid; 0.4.2's wave alignment
+firing (it ran, +5.1 s, but the raid ended before the next wave). Victim kill times count from the last resume.
+- Server (decompiled `SPTarkov.Server.Core` `LocationLifecycleService`/`InRaidHelper`): `local/start` only resets
+  server-side skill fatigue, generates loot and a new serverId. `local/end` *assigns* (doesn't add) level, skills,
+  `Stats.Eft`, encyclopedia, `TaskConditionCounters`, achievements, quests, XP, trader standing and health from the
+  client profile, and replaces equipment and quest items only (`SetInventory`; the stash is never touched, so the
+  profile lock in C is required). So progress applies once if the final client profile is cumulative.
+- Client resets at every raid start, now skipped on a resume: `HealthStatisticsManager/BaseStatisticsManager.
+  BeginStatisticsSession` (from `Player.Init`) clears `SessionCounters` (all raid XP, kills), `DamageHistory` and
+  `Victims` unless `TransitController.IsTransit`; `StatisticsPatches` answers IsTransit yes for the resumed profile
+  during that call only. `Player.ManageGameQuests` (from `BaseLocalGame.SpawnLoot`) resets one-raid quest counters
+  (`resetOnSessionEnd`) unless in transit; `ManageGameQuestsPatch` runs its other two steps without the reset. Quest
+  loot comes from `location.Loot` (the saved world), so nothing spawns twice.
+- Still lost per session (small stats, accepted for now): pedometer distance, `_stackableObjectsStartCount` session
+  diffs, `OnlineAction` skill time (session length), healing/energy running totals.
+- Duplicate check (`Core.DuplicateCheck`): every save checks that each item id is in one place (player, one bot,
+  world); the capture line says "no duplicate items" or names them.
+
+**Next: C, the server mod and the lock.** Not started. Without it a player can change their stash, gear, traders or
+quests between Save & Quit and the resume, and the resume brings the saved kit back: duplication (raid end replaces
+equipment only, never the stash) or lost gear, and quest progress overwritten by the save's. Scope (docs/DESIGN.md,
+Joel's decisions above): save storage beside the profile; while a save exists, the profile is locked (traders,
+flea, hideout transfers, mail, other raids) and the menu offers only Resume or Abandon; Abandon resolves as MIA and
+a combat save as Killed, both without loading the raid (send `local/end` built from the save); a hard exit scraps the
+raid as standard SPT does, and a save used up on Ready is discarded and the profile unlocked on next launch. Plan,
+riskiest first:
+1. Before writing code, check the SPT 4.1 server mod API against real code: how ABPS (`acidphantasm-botplacementsystem`)
+   and ORBIT (`Orbit.Server.dll`) register (`[Injectable]`, `IOnLoad`, `StaticRouter`/`RouteAction`, `AbstractPatch`),
+   and which server routes change the profile out of raid (inventory moves and trades, ragfair, hideout, mail,
+   `/client/match/local/start` on another map), so the lock refuses each; and how the client shows a refused action.
+   Decompile `SPTarkov.Server.Core.dll` in `H:\SPT4.1.X\SPT_Runtime` with ilspycmd.
+2. The resolve path: build `EndLocalRaidRequestData` from a save (Killed or MIA) and run it through the server's
+   own `EndLocalRaidAsync`, so death and MIA apply exactly as normal.
+3. Lock, menu (Resume / Abandon only) and storage.
+Then D (pause-menu button, Ready to Resume prompt, version and mod-list checks, release).
 
 ## How the resume hooks in (B1)
 

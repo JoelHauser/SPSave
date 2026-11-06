@@ -20,6 +20,8 @@ namespace SPSave.Core
         public string SkippedLootKinds = "";
         public int WorldItemIds;
         public int PlayerItemIds;
+        /// <summary>Item ids found in more than one place (DuplicateCheck); 0 when the save is clean.</summary>
+        public int DuplicateItems;
         public int Doors;
         public int PlayerEffects;
         public string Weather = "";
@@ -62,7 +64,8 @@ namespace SPSave.Core
         {
             return $"{Map}: frame {FrameMs:F0} ms (player {PlayerMs:F0}, bots {BotsMs:F0}, loot {LootMs:F0}, world {WorldMs:F0}, " +
                    $"state {StateMs:F0}, encode {EncodeMs:F0}, write {WriteMs:F0}, verify {VerifyFileMs:F0}, round trip {RoundTripMs:F0}); " +
-                   $"{BotsAlive} bots, {Corpses} corpses, {LooseItems} loose, {Containers} containers, {Doors} doors; weather {Weather}; " +
+                   $"{BotsAlive} bots, {Corpses} corpses, {LooseItems} loose, {Containers} containers, {Doors} doors; " +
+                   $"{(DuplicateItems == 0 ? "no duplicate items" : $"{DuplicateItems} DUPLICATE ITEMS")}; weather {Weather}; " +
                    $"{FileBytes / 1024} KB on disk ({RawBytes / 1024} KB raw); {CombatDetail}; round trip {(RoundTripOk ? "ok" : "FAILED")}";
         }
 

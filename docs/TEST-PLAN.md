@@ -1,3 +1,30 @@
+# B3: the same raid saved twice, then extracted (0.5.0)
+
+About 12 minutes, with one extraction. Progress from every session must count once at the end.
+
+**First raid, Factory (day), naked PMC:**
+
+1. Earn some XP: search a container or two, and kill a scav if one comes (shoot from cover). Note the kill count.
+2. Out of contact, **Ctrl+F10**.
+
+**Relaunch, start Factory, Ctrl+F11.**
+
+3. Earn a little more: search another container or kill another scav.
+4. Out of contact, **Ctrl+F10** again (second save of the same raid).
+
+**Relaunch, start Factory, Ctrl+F11.**
+
+5. **Extract** (Gate 3 or Gate 0; check the exits with the double-tap of O).
+6. On the results screen, the kills and XP include all three sessions.
+
+**Send back** the `SPSave` lines from `BepInEx\LogOutput.log` of each launch (the file is rewritten every launch, so
+copy it after each one), plus the results screen numbers. The lines that matter:
+- At each save: `Captured ... no duplicate items ...`.
+- At each resume: `Raid statistics carried on from the save: N session XP so far, K kills` (growing each time) and
+  `One-raid quest counters carried on from the save`.
+- Optional: if a save lands a minute before 8:20 or 14:20, `Wave timers aligned to the raid clock` and the PMC wave
+  at about 498 s or 858 s (checks 0.4.2).
+
 # B2 step 3: spawning carries on after a resume (0.4.2)
 
 0.4.1 passed 2026-11-06: saved at 7:03, the 8:20 PMC waves fired 77 s after resume, at raid time 491/496 s (about

@@ -60,8 +60,8 @@ profile at `/client/match/local/end`, and the client only sends that from `GameE
 - **A. Capture spike.** Done: STEP-A-RESULTS.md.
 - **B1. Resume the player and the world, plus Save & Quit.** Done (passed in game 2026-11-06).
 - **B2. Living bots** come back from their saved profiles in their saved places; later spawn waves continue, earlier
-  ones don't repeat. Checked against SAIN and ABPS first.
+  ones don't repeat. Checked against SAIN, ABPS and ORBIT first. Done (2026-11-06).
 - **B3. Repeat and finish:** a second save and resume of the same raid, then extraction applies progress exactly once,
-  with a duplicate check.
-- **C. Server mod and lock.** Save storage beside the profile, the menu lock, Abandon and Killed resolution.
+  with a duplicate check. Done (2026-11-06; the extraction and duplicate check passed in game).
+- **C. Server mod and lock (next).** Save storage beside the profile, the menu lock, Abandon and Killed resolution.
 - **D. Pause-menu button, Ready to Resume prompt**, version and mod-list checks on resume.

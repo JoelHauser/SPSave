@@ -81,6 +81,10 @@ namespace SPSave.Game
             // Living bots: their profiles (identity, gear, health), where they are, and what they know about the player.
             var awareness = new List<BotAwareness>();
             var groups = new Dictionary<BotsGroup, int>();
+            var itemOwners = new List<KeyValuePair<string, IEnumerable<string>>>
+            {
+                new KeyValuePair<string, IEnumerable<string>>("player", state.Player.Items.Select(i => i.Id).ToList())
+            };
             foreach (var bot in world.AllAlivePlayersList)
             {
                 if (bot == null || bot.IsYourPlayer)
@@ -95,6 +99,8 @@ namespace SPSave.Game
                     result.Sections.Add(Section(BotSectionPrefix + bot.ProfileId + ProfileCodec.JsonSuffix, bytes));
                     state.Bots.Add(botState);
                     awareness.Add(known);
+                    itemOwners.Add(new KeyValuePair<string, IEnumerable<string>>($"bot {bot.Profile?.Nickname} {bot.ProfileId}",
+                        ItemsOf(bot.Profile).Select(i => i.Id).ToList()));
                 }
                 catch (Exception e)
                 {
@@ -123,6 +129,16 @@ namespace SPSave.Game
             var loot = CollectLoot(world, report, result);
             result.Sections.Add(WorldLoot.Write(loot));
             report.WorldItemIds = result.WorldItemIds.Count;
+
+            // Every item has one place: on the player, on one bot, or in the world (corpses included).
+            itemOwners.Add(new KeyValuePair<string, IEnumerable<string>>("world", result.WorldItemIds));
+            var duplicates = DuplicateCheck.Find(itemOwners);
+            report.DuplicateItems = duplicates.Count;
+            foreach (var pair in duplicates.Take(10))
+            {
+                var what = result.WorldItems.TryGetValue(pair.Key, out var where) ? $"{where.Key.TemplateId} '{where.Key.ShortName}'" : "";
+                Plugin.Log.LogWarning($"Duplicate item {pair.Key} {what} in: {string.Join(", ", pair.Value)}.");
+            }
             report.LootMs = Lap(watch);
 
             // Doors, raid clock, time of day, weather.
