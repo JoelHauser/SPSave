@@ -9,7 +9,8 @@ never call it release-ready before in-game checks.
 Step A (capture spike) done in game 2026-11-06 on Factory, Customs and Streets: results in docs/STEP-A-RESULTS.md.
 Real save ~80–90 ms on Streets; no measurable normal-play cost (one off/on pair, not four: Joel won't do long runs).
 Open: name the skipped loot entries (current build logs them).
-B1 (resume player and world, no bots) built 2026-11-06, **not yet run in game**. Starting a PMC raid on the save's
+B1 (resume player and world, no bots) **passed in game 2026-11-06** (Factory, full client + server restart): position,
+loot, bodies, doors, magazines (106/106 items), searched bodies, on-screen timer, character and weapon. Next: B2 (bots). Starting a PMC raid on the save's
 map resumes it; frozen until Ctrl+F11; the save is retired to `used\<stamp>\` on Ready. Test: docs/TEST-PLAN.md (B1).
 
 ## How the resume hooks in (B1)
