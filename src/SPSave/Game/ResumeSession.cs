@@ -40,6 +40,17 @@ namespace SPSave.Game
         internal static Profile Profile;
         internal static LootData Loot;
         internal static WeatherNode[] Weather;
+        /// <summary>Saved living bots' profiles by profile id, rebuilt from their sections.</summary>
+        internal static readonly Dictionary<string, Profile> BotProfiles = new Dictionary<string, Profile>(StringComparer.Ordinal);
+
+        /// <summary>
+        /// A resumed raid gets no fresh bots (waves, bosses, the scav trickle) until B2 step 3 trims the saved waves:
+        /// their timers would start again from zero. Holds until the next raid starts.
+        /// </summary>
+        internal static bool HoldFreshSpawns => Phase != ResumePhase.None;
+
+        internal static bool IsRestoredBot(Profile profile) =>
+            profile != null && profile.Id != null && BotProfiles.TryGetValue(profile.Id, out var restored) && ReferenceEquals(restored, profile);
 
         /// <summary>Found-in-raid flags of every saved world item, by reference: GameWorld.SpawnLoot(initial) sets them all.</summary>
         private static readonly Dictionary<Item, bool> FoundInRaid = new Dictionary<Item, bool>();
@@ -121,6 +132,25 @@ namespace SPSave.Game
                 weather = Encoding.UTF8.GetString(weatherBytes).ParseJsonTo<WeatherNode[]>();
             }
 
+            // Living bots. One that can't be rebuilt is left out of the resume rather than stopping it.
+            var botProfiles = new Dictionary<string, Profile>(StringComparer.Ordinal);
+            foreach (var section in sections)
+            {
+                if (!section.Key.StartsWith(RaidCapture.BotSectionPrefix, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                try
+                {
+                    var bot = new Profile(ProfileCodec.Read(section.Key, section.Value));
+                    botProfiles[bot.Id] = bot;
+                }
+                catch (Exception e)
+                {
+                    Plugin.Log.LogWarning($"Saved bot {section.Key} can't be rebuilt and won't come back: {e.Message}");
+                }
+            }
+
             FoundInRaid.Clear();
             foreach (var entry in loot)
             {
@@ -143,12 +173,24 @@ namespace SPSave.Game
             Profile = profile;
             Loot = loot;
             Weather = weather;
+            foreach (var pair in botProfiles)
+            {
+                BotProfiles[pair.Key] = pair.Value;
+            }
+            foreach (var bot in state.Bots)
+            {
+                if (!string.IsNullOrEmpty(bot.Personality) && BotProfiles.ContainsKey(bot.ProfileId))
+                {
+                    SainCompat.Pinned[bot.ProfileId] = bot.Personality;
+                }
+            }
             // Last: nothing above changes the game, so a failure before this line leaves a normal raid.
             session.Profile = profile;
             Phase = ResumePhase.Loading;
 
             Plugin.Log.LogInfo($"Resuming the raid on {map} saved {manifest.CreatedUtc} (from {from}): {loot.Count} world entries, " +
-                               $"{state.Doors.Count} doors, {state.Clock?.RemainingSeconds:F0} s left. Bots are not restored in this build.");
+                               $"{state.Doors.Count} doors, {BotProfiles.Count}/{state.Bots.Count} living bots, " +
+                               $"{state.Clock?.RemainingSeconds:F0} s left. No fresh spawns this raid (waves come in B2 step 3).");
             NotificationManager.DisplayMessageNotification($"SPSave: resuming your saved raid on {map}.");
         }
 
@@ -195,6 +237,23 @@ namespace SPSave.Game
             FoundInRaid.Clear();
         }
 
+        /// <summary>
+        /// The player took control: the save's data is done with, but restored bots' personalities and profiles stay
+        /// until the next raid. SAIN sets a bot's personality when it activates and again on preset changes, which can
+        /// come after Ready (the 0.3.0 test cleared them here, so the pins were gone when SAIN asked).
+        /// </summary>
+        internal static void GoLive()
+        {
+            SavePath = null;
+            Manifest = null;
+            State = null;
+            Profile = null;
+            Loot = null;
+            Weather = null;
+            FoundInRaid.Clear();
+            Phase = ResumePhase.Live;
+        }
+
         internal static void Reset()
         {
             Phase = ResumePhase.None;
@@ -204,7 +263,17 @@ namespace SPSave.Game
             Profile = null;
             Loot = null;
             Weather = null;
+            BotProfiles.Clear();
+            SainCompat.Pinned.Clear();
+            SainCompat.Logged.Clear();
+            FreshSpawnGate.Reset();
             FoundInRaid.Clear();
+        }
+
+        /// <summary>Gear, heads and clothing of every saved living bot; a normal spawn loads them with the bot's profile.</summary>
+        internal static IEnumerable<ResourceKey> BotBundles()
+        {
+            return BotProfiles.Values.SelectMany(bot => bot.GetAllPrefabPaths()).ToList();
         }
 
         private static T Parse<T>(Dictionary<string, byte[]> sections, string name)

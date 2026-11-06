@@ -64,6 +64,17 @@ namespace SPSave.Game
         public float PoseLevel;
         public bool Prone;
         public string HandsItemId;
+        /// <summary>Bots with the same number shared a BotsGroup (numbered per save, from 1; 0 = none).</summary>
+        public int Group;
+        /// <summary>The group's BotsGroup.TargetMembersCount (ORBIT sizes its squads from it).</summary>
+        public int GroupTarget;
+        /// <summary>BotBoss.IamBoss, and how many followers it wanted (BotBoss.TargetFollowersCount).</summary>
+        public bool Boss;
+        public int FollowersTarget;
+        /// <summary>BotOwner.SpawnBotZone.NameZone.</summary>
+        public string Zone;
+        /// <summary>SAIN's personality name (SAINExternal.GetPersonality); null without SAIN.</summary>
+        public string Personality;
         public bool KnowsPlayer;
         public bool SeesPlayer;
         public float? SecondsSinceSeenPlayer;

@@ -80,6 +80,7 @@ namespace SPSave.Game
 
             // Living bots: their profiles (identity, gear, health), where they are, and what they know about the player.
             var awareness = new List<BotAwareness>();
+            var groups = new Dictionary<BotsGroup, int>();
             foreach (var bot in world.AllAlivePlayersList)
             {
                 if (bot == null || bot.IsYourPlayer)
@@ -90,7 +91,7 @@ namespace SPSave.Game
                 {
                     var descriptor = Describe(bot);
                     var bytes = ProfileCodec.Write(descriptor);
-                    var botState = ReadBot(bot, player, out var known);
+                    var botState = ReadBot(bot, player, groups, out var known);
                     result.Sections.Add(Section(BotSectionPrefix + bot.ProfileId + ProfileCodec.JsonSuffix, bytes));
                     state.Bots.Add(botState);
                     awareness.Add(known);
@@ -379,7 +380,7 @@ namespace SPSave.Game
             return state;
         }
 
-        private static BotState ReadBot(Player bot, Player mainPlayer, out BotAwareness awareness)
+        private static BotState ReadBot(Player bot, Player mainPlayer, Dictionary<BotsGroup, int> groups, out BotAwareness awareness)
         {
             var state = new BotState
             {
@@ -400,6 +401,27 @@ namespace SPSave.Game
 
             awareness = default;
             var owner = bot.AIData?.BotOwner;
+            if (owner != null)
+            {
+                var group = owner.BotsGroup;
+                if (group != null)
+                {
+                    if (!groups.TryGetValue(group, out var number))
+                    {
+                        number = groups.Count + 1;
+                        groups.Add(group, number);
+                    }
+                    state.Group = number;
+                    state.GroupTarget = group.TargetMembersCount;
+                }
+                if (owner.Boss != null && owner.Boss.IamBoss)
+                {
+                    state.Boss = true;
+                    state.FollowersTarget = owner.Boss.TargetFollowersCount;
+                }
+                state.Zone = owner.SpawnBotZone != null ? owner.SpawnBotZone.NameZone : null;
+                state.Personality = SainCompat.ReadPersonality(owner);
+            }
             var enemies = owner != null ? owner.EnemiesController?.EnemyInfos : null;
             if (enemies != null && enemies.TryGetValue(mainPlayer, out var info) && info != null)
             {

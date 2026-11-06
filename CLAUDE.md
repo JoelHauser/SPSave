@@ -10,15 +10,42 @@ Step A (capture spike) done in game 2026-11-06 on Factory, Customs and Streets: 
 Real save ~80–90 ms on Streets; no measurable normal-play cost (one off/on pair, not four: Joel won't do long runs).
 Open: name the skipped loot entries (current build logs them).
 B1 (resume player and world, no bots) **passed in game 2026-11-06** (Factory, full client + server restart): position,
-loot, bodies, doors, magazines (106/106 items), searched bodies, on-screen timer, character and weapon. Next: B2 (bots). Starting a PMC raid on the save's
-map resumes it; frozen until Ctrl+F11; the save is retired to `used\<stamp>\` on Ready. Test: docs/TEST-PLAN.md (B1).
+loot, bodies, doors, magazines (106/106 items), searched bodies, on-screen timer, character and weapon. Ctrl+F10 is
+Save & Quit; starting a PMC raid on the save's map resumes it, frozen until Ctrl+F11; the save is retired to
+`used\<stamp>\` on Ready. Merged to main (`ba9aeb7`).
+
+**Now: B2, living bots.** Plan, riskiest first:
+1. **Done 2026-11-06:** SAIN, ABPS and ORBIT checked against their code: docs/B2-COMPAT.md. Nothing blocks. SAIN
+   attaches to any bot (`BotOwner.PreActivate`) but re-rolls personality; ABPS PMCs are boss waves that the server
+   regenerates only on `local/end`, and the game restarts every wave timer from zero on resume. ORBIT's sleeping
+   (Ghost Mode) bots stay in `AllAlivePlayersList`, so capture includes them; its squads follow `BotsGroup`.
+2. **Passed in game 2026-11-06 (0.3.1, Factory):** 9/9 bots at exact positions incl. 3 PMCs, all 9 SAIN
+   personalities kept (8 differed from SAIN's new draw), bleeds re-added on one, 5 restored scavs killed, no errors.
+   0.3.0 had cleared the SAIN pins in Ready's `Reset()`; SAIN activates restored bots only after Ready, so
+   `ResumeSession.GoLive` keeps them for the raid. `BotRestore` spawns each saved
+   bot from its profile through `BotCreatorClient.ActivateBot(Profile, PositionNote, zone, ...)` and registers it with
+   `BotSpawner.ActivateBotCallback`. Scavs regroup through the game's `GetGroupAndSetEnemies`; bosses, followers and
+   PMCs get one `BotsGroup` per saved group with its saved `TargetMembersCount`, and a saved boss calls `SetBoss`.
+   SAIN personality is pinned by a postfix (`SainCompat`), restored PMCs go into ABPS's cache (`AbpsCompat`), bot gear
+   bundles join the preload, and bots keep their saved found-in-raid flags. B1's `NoBots` is gone (it also left
+   `_canSpawn` false, so no `OnBeingHit`/`OnKill` for restored bots); `FreshSpawnGate` holds every fresh spawn in a
+   resumed raid instead.
+3. Let spawning continue: save the location's `BossLocationSpawn[]` and `Waves` (ABPS re-randomizes them on server
+   restart), per-wave `ShallSpawn`/`Activated`; on resume drop fired and start waves, shift the rest by the time
+   played, keep `ShallSpawn`. Then `FreshSpawnGate` goes.
+4. Test on Factory with living scavs: same bots (profile ids), same places, same gear; then a second save and resume.
+Bots come back unaware of the player (Joel's decision; combat saves are refused).
+
+After B2: B3 (second save/resume of the same raid, extraction applies progress once, duplicate check), then C (server
+mod: save storage, profile lock, Resume Raid button, Abandon = MIA, combat save = Killed), then D (pause-menu button,
+version and mod-list checks, release).
 
 ## How the resume hooks in (B1)
 
 `LocalGameMatchingPatch` (prefix on `TarkovApplication.LocalGameMatching`, which preloads `Session.Profile.GetAllPrefabPaths()` before `LocalGameCreate`; swapping later left saved gear unloaded: no weapon, broken model) loads the save and sets
 `Session.Profile = new Profile(saved descriptor)` (the setter is on `ClientBackendSession`; after a raid the client
 reloads the profile with `Session.GetProfiles`, carrying only `EftStats` across). Then: `GameTimer.Start` gets
-startTime = now − played; `LocalGame.vmethod_1` gets `BotAmount = NoBots` (`BotsController._canSpawn` false);
+startTime = now − played; fresh bot spawns are held (`FreshSpawnGate`, three `BotsController` methods);
 `BaseLocalGame.SpawnLoot` gets the saved `location.Loot`; `GameWorld.SpawnLoot` postfix puts saved FIR flags back;
 `Profile.SetSpawnedInSession(false)` and `RemoveUsedLocationKeycard` are skipped; `vmethod_6` keeps `_entryPoint` and
 skill fatigue, then `RaidRestore` places the player and sets effects, doors (`SetInitialSyncState`), weather (private
@@ -45,6 +72,8 @@ Target install: `H:\SPT4.1.X` (SPT 4.1.6, EFT 0.16.9.40743). Repo https://github
 - `tools/SaveDump`: validates a save and extracts its sections.
 
 ## Build
+
+The install must have SAIN (compile-time reference for the personality pin; at run time SAIN is optional).
 
 ```
 dotnet build src\SPSave -c Release -p:SPTPath="H:\SPT4.1.X" [-p:DeployToSPT=true]

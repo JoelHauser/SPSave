@@ -36,6 +36,7 @@ namespace SPSave.Game
             Run("search", notes, () => notes.Add(RestoreSearch(player, state.Player)));
             Run("weather", notes, () => notes.Add(RestoreWeather()));
             Run("time of day", notes, () => notes.Add(RestoreTimeOfDay(world, state.Clock)));
+            Run("bots", notes, () => notes.Add(BotRestore.Spawn(game as IBotGame, state)));
 
             Plugin.Log.LogInfo("Raid restored: " + string.Join("; ", notes.Where(n => !string.IsNullOrEmpty(n))));
         }
@@ -74,7 +75,7 @@ namespace SPSave.Game
         /// Bleeds, fractures and intoxication are IRestorable and come back with the profile's health. These are the
         /// ones the profile drops; anything else that was active (stun, flash, pain from a fracture) is left to the game.
         /// </summary>
-        private static string RestoreEffects(ActiveHealthController health, List<EffectState> saved)
+        internal static string RestoreEffects(ActiveHealthController health, List<EffectState> saved)
         {
             if (health == null || saved == null)
             {

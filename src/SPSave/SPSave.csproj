@@ -5,7 +5,7 @@
     <AssemblyName>SPSave</AssemblyName>
     <RootNamespace>SPSave</RootNamespace>
     <!-- Keep in step with Plugin.Version. -->
-    <Version>0.2.0</Version>
+    <Version>0.3.1</Version>
     <LangVersion>latest</LangVersion>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <DebugType>none</DebugType>
@@ -45,6 +45,9 @@
     <Reference Include="0Harmony"><HintPath>$(SPTBepInExPath)\core\0Harmony.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="spt-common"><HintPath>$(SPTBepInExPath)\plugins\spt\spt-common.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="spt-reflection"><HintPath>$(SPTBepInExPath)\plugins\spt\spt-reflection.dll</HintPath><Private>false</Private></Reference>
+    <!-- SAIN is optional at run time (SainCompat only touches it when loaded) but needed to build: the install must have it. -->
+    <Reference Include="SAIN"><HintPath>$(SPTBepInExPath)\plugins\SAIN\SAIN.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="SAIN.Preset.Shared"><HintPath>$(SPTBepInExPath)\plugins\SAIN\SAIN.Preset.Shared.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
 
   <Target Name="DeployToSPT" AfterTargets="Build" Condition="'$(DeployToSPT)' == 'true'">

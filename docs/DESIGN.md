@@ -57,8 +57,11 @@ profile at `/client/match/local/end`, and the client only sends that from `GameE
 
 ## Steps
 
-- **A. Capture spike (now).** Capture to disk, read back, measure. Restores nothing. See TEST-PLAN.md.
-- **B. Restore.** Factory: dead scav, living scav, looted container, partial magazine; full client and server restart;
-  second save and resume; extraction; check for duplicates. Then the combat save and Abandon paths.
+- **A. Capture spike.** Done: STEP-A-RESULTS.md.
+- **B1. Resume the player and the world, plus Save & Quit.** Done (passed in game 2026-11-06).
+- **B2. Living bots** come back from their saved profiles in their saved places; later spawn waves continue, earlier
+  ones don't repeat. Checked against SAIN and ABPS first.
+- **B3. Repeat and finish:** a second save and resume of the same raid, then extraction applies progress exactly once,
+  with a duplicate check.
 - **C. Server mod and lock.** Save storage beside the profile, the menu lock, Abandon and Killed resolution.
 - **D. Pause-menu button, Ready to Resume prompt**, version and mod-list checks on resume.

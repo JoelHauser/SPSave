@@ -1,3 +1,33 @@
+# B2 step 2: living bots come back (0.3.1)
+
+0.3.0 run 2026-11-06 (Factory): 5/5 bots back at their exact saved positions, 3 PMCs known to ABPS, fresh spawns
+held, no errors. It cleared the SAIN pins on Ready, so personalities weren't kept; 0.3.1 fixes that and logs it.
+
+About 6 minutes, no fighting needed. Build with `-p:DeployToSPT=true`. Saves made with 0.2.0 still load, but their
+bots come back without SAIN personality or squad numbers, so make a fresh one.
+
+**First raid, Factory (day), naked PMC, bots on as normal:**
+
+1. Stay hidden for about 2 minutes so scavs spawn and spread out. If you can see one without it seeing you, note
+   where it is and what it carries.
+2. Out of contact, press **Ctrl+F10**. If it says you're in combat, wait and try again.
+
+**Relaunch the game and start Factory (day).** It loads frozen as in B1.
+
+3. Before pressing anything: the scav you noted stands where it was, with the same gear.
+4. Press **Ctrl+F11**. Let a scav find you, or shoot one: it must react (fire back, take cover). That checks that
+   restored bots get hit events.
+5. Leave.
+
+**Send back** every `SPSave` line from `BepInEx\LogOutput.log`. The ones that matter:
+- `Resuming the raid ... N/N living bots`: every saved bot rebuilt.
+- `Raid restored: ... N/N bots spawning`.
+- One `Bot back:` line per bot: position against saved position, health, saved SAIN personality.
+- One `SAIN personality kept for <bot>: <personality>` line per bot, usually after Ctrl+F11 (when SAIN activates
+  it). It must match that bot's saved personality. A bot with none of these lines kept nothing.
+- `Holding fresh bot spawns`: expected. No new waves in a resumed raid until step 3.
+- Any `Restoring bot ... failed` is a bug.
+
 # B1: resume your character and the world (no bots)
 
 About 10 minutes. **Ctrl+F10 is Save & Quit**: it saves, checks the save, and closes the game. The server never

@@ -9,10 +9,14 @@ namespace SPSave
 {
     [BepInPlugin(Guid, "SPSave", Version)]
     [BepInDependency("com.SPT.core")]
+    // Optional; loaded first so their types and patches are in place. See docs/B2-COMPAT.md.
+    [BepInDependency(SainCompat.Guid, BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency(AbpsCompat.Guid, BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency("com.chazut.orbit", BepInDependency.DependencyFlags.SoftDependency)]
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string Guid = "com.joelhauser.spsave";
-        public const string Version = "0.2.0";
+        public const string Version = "0.3.1";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<KeyboardShortcut> CaptureKey;
@@ -47,7 +51,10 @@ namespace SPSave
             new LocalGameMatchingPatch().Enable();
             new PrefabPathsPatch().Enable();
             new GameTimerStartPatch().Enable();
-            new BotSettingsPatch().Enable();
+            new WaveSpawnGatePatch().Enable();
+            new BossSpawnGatePatch().Enable();
+            new FreeSpawnGatePatch().Enable();
+            SainCompat.Enable();
             new SpawnLootPatch().Enable();
             new WorldSpawnLootPatch().Enable();
             new SpawnedInSessionPatch().Enable();

@@ -160,8 +160,7 @@ namespace SPSave.Game
 
             var left = timer?._escapeDateTime != null ? (timer._escapeDateTime.Value - DateTimeExtensions.UtcNow).TotalSeconds : 0d;
             Plugin.Log.LogInfo($"Player took control after {frozen.TotalSeconds:F0} s frozen; {left:F0} s left of {timer?.SessionSeconds()}.");
-            ResumeSession.Reset();
-            ResumeSession.Phase = ResumePhase.Live;
+            ResumeSession.GoLive();
             Destroy(this);
         }
 
