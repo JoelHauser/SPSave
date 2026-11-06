@@ -171,3 +171,21 @@ SPSave's only per-frame code in Step A is one key check.
 
 `captures.csv`, `frameprobe\summary.csv`, the SPSave lines from `BepInEx\LogOutput.log`, and anything from A1 step 3
 that didn't match.
+
+## C2. Ending a save as MIA or Killed (0.6.1)
+
+Short runs on Factory. Each needs a fresh save. Before each save, earn a little XP so it shows: kill one scav or
+search one container. Note your level XP on the character screen before the raid.
+
+1. **MIA.** Make a save (Ctrl+F10). Restart the game. In the F12 menu, under "Step C (testing)", set "End the next
+   resume as" to MissingInAction. Start a PMC raid on Factory. Expected: the raid loads, then ends at once as Missing
+   in Action, with the screen black throughout: the raid world must never show. The results screen shows MIA and the
+   XP from the saved session. The setting goes back to Resume.
+2. **Killed.** Same, with Killed. Expected: the raid loads and, still on black, the results screen shows
+   Killed. Your gear is gone except the secure container.
+3. After each: the save is gone (moved under `SPSave\saves\<profile>\used\`). Starting another Factory raid starts a
+   fresh one. On the character screen, XP went up by the saved session's amount, and the stats count one more MIA or
+   death.
+
+Send back: the SPSave lines from `BepInEx\LogOutput.log` ("This load ends the saved raid as ...", "Save used up",
+"Ending the saved raid ..."), and anything on screen that looked off.

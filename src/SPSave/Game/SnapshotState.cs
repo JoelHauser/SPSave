@@ -19,6 +19,8 @@ namespace SPSave.Game
         public string ServerId;
         public string TimeVariant;
         public List<string> Plugins = new List<string>();
+        /// <summary>Null: resume. "Killed": saved in combat, so the next load ends the raid as a death (Core.Resolve).</summary>
+        public string ResolveAs;
     }
 
     public sealed class RaidState

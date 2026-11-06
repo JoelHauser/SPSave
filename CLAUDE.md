@@ -86,7 +86,29 @@ riskiest first:
    call the game's own `GameEnd` with Killed or MIA before Ready. Reason: `Player.OnGameSessionEnd` (session XP into
    `Info.Experience`, death/MIA counters, quest exit and fail conditions through `ConditionalBook`) needs a live player
    and the save is captured before it; a raw server-side `EndLocalRaidAsync` from the save would skip all of it.
-3. Lock, menu (Resume / Abandon only) and storage.
+   **Built 2026-11-06 (0.6.0, not yet tested in game; docs/TEST-PLAN.md C2):** `Core.ResolveRule` picks the outcome
+   (manifest `ResolveAs = "Killed"` from a combat save wins; else `ResumeSession.Requested`, which Abandon will set;
+   for now a testing config "End the next resume as", used once). The resume loads as usual; `GameStartPatch`
+   attaches `ResolveController` instead of `ReadyController` (no freeze). After the loading fade it uses up the save,
+   sets `SessionStartTime` back by the time played, then Killed = `ActiveHealthController.Kill(Undefined)` (the
+   game's `DiedEvent` → `InitiateGameStopping`, death panel, `Stop(Killed, 5 s)`) and MIA = `Stop(MissingInAction)`
+   (what the raid timer calls). **0.6.0 MIA passed in game 2026-11-06** (save used up, server MIA counter 1, no
+   errors) but the raid showed and the player could move before the fade (it waited for the loading fade, and
+   `Stop`'s `StartBlackScreenShow` coroutine starts at alpha 0). Joel: a Killed/MIA ending must never show the raid.
+   **0.6.1 Killed passed in game 2026-11-06** (Factory): save used up; server Killed 2→3, Sessions +1, win streak
+   reset, +1,217 XP (995 session XP before the end multipliers); gear lost except armband, dogtag, pockets and the
+   secure container (empty in the save too); no errors. `DeathCause` is a fresh one with no killer (Role `marksman`
+   is `WildSpawnType` 0), i.e. the game's own `OnDeath` ran. Joel confirmed: screen stayed black, raid never shown,
+   XP matched. **C2 done.**
+   Storage (Joel, 2026-11-06): the save stays at the SPT root (`<SPT>\SPSave\saves\<profile>\raid.spsave`, as now);
+   only the lock lives on the server.
+   0.6.1: `ResolveBlackout` holds `PreloaderUI`'s overlay black from game start until `Stop`'s
+   callback (GameEnd), by replacing `Co_ShowBlackImage` (every fade goes through it) while holding; the
+   controller ends the raid one frame after start. Still to do: starting that load from the menu without picking the map (C3); combat
+   saves still refused until the confirmation dialog exists.
+3. Lock, menu (Resume / Abandon only) and storage. Joel: all UI must look like stock EFT (reuse the game's own
+   buttons, text and dialogs; no custom styling). The Ready overlay's `OnGUI` label breaks that rule and needs
+   replacing in D.
 Then D (pause-menu button, Ready to Resume prompt, version and mod-list checks, release).
 
 ## How the resume hooks in (B1)

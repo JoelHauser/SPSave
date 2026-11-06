@@ -2,6 +2,7 @@ using System.IO;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
+using SPSave.Core;
 using SPSave.Game;
 using UnityEngine;
 
@@ -16,7 +17,7 @@ namespace SPSave
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string Guid = "com.joelhauser.spsave";
-        public const string Version = "0.5.0";
+        public const string Version = "0.6.1";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<KeyboardShortcut> CaptureKey;
@@ -24,6 +25,26 @@ namespace SPSave
         internal static ConfigEntry<bool> VerifyRoundTrip;
         internal static ConfigEntry<bool> ResumeEnabled;
         internal static ConfigEntry<KeyboardShortcut> ReadyKey;
+        internal static ConfigEntry<ResolveTest> TestResolve;
+
+        public enum ResolveTest
+        {
+            Resume,
+            MissingInAction,
+            Killed
+        }
+
+        /// <summary>The testing setting's outcome, used once: it goes back to Resume when taken.</summary>
+        internal static ResolveOutcome? TestOutcome()
+        {
+            var value = TestResolve?.Value ?? ResolveTest.Resume;
+            if (value == ResolveTest.Resume)
+            {
+                return null;
+            }
+            TestResolve.Value = ResolveTest.Resume;
+            return value == ResolveTest.Killed ? ResolveOutcome.Killed : ResolveOutcome.MissingInAction;
+        }
 
         /// <summary>&lt;game root&gt;\SPSave: saves\&lt;profile id&gt;\raid.spsave and captures.csv.</summary>
         internal static string SaveRoot => Path.Combine(BepInEx.Paths.GameRootPath, "SPSave");
@@ -44,6 +65,9 @@ namespace SPSave
                 "Starting a PMC raid on the map of your save resumes it instead of starting fresh.");
             ReadyKey = Config.Bind("Step B", "Ready key", new KeyboardShortcut(KeyCode.F11, KeyCode.LeftControl),
                 "A resumed raid stays paused until you press this.");
+            TestResolve = Config.Bind("Step C (testing)", "End the next resume as", ResolveTest.Resume,
+                "Testing only, until the menu's Abandon exists: the next resume of a save loads the raid and ends it " +
+                "as MIA or Killed instead. Set back to Resume after it is used.");
 
             new RaidStartPatch().Enable();
             new WeatherNodesPatch().Enable();
@@ -63,6 +87,7 @@ namespace SPSave
             new SpawnedInSessionPatch().Enable();
             new KeycardPatch().Enable();
             new GameStartPatch().Enable();
+            ResolveBlackout.Enable();
             new BeginStatisticsSessionPatch().Enable();
             new TransitContinuePatch().Enable();
             new ManageGameQuestsPatch().Enable();

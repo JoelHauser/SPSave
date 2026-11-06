@@ -315,7 +315,15 @@ namespace SPSave.Game
             {
                 Plugin.Log.LogError("Restoring the raid failed partway: " + e);
             }
-            ReadyController.Attach(__instance.GameWorld);
+            if (ResumeSession.Outcome != null)
+            {
+                ResolveBlackout.Begin();
+                ResolveController.Attach(__instance.GameWorld);
+            }
+            else
+            {
+                ReadyController.Attach(__instance.GameWorld);
+            }
         }
     }
 }

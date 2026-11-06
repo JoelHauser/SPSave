@@ -21,7 +21,9 @@ namespace SPSave.Game
         Loading,
         /// <summary>Game started, world restored and frozen until the player takes control.</summary>
         WaitingForReady,
-        /// <summary>The player took control; the save is used up.</summary>
+        /// <summary>Game started; the raid is being ended as Killed or MIA (ResolveController). Not frozen.</summary>
+        Resolving,
+        /// <summary>The player took control, or the resolve ended the raid; the save is used up.</summary>
         Live
     }
 
@@ -40,6 +42,16 @@ namespace SPSave.Game
         internal static Profile Profile;
         internal static LootData Loot;
         internal static WeatherNode[] Weather;
+
+        /// <summary>
+        /// Null: a normal resume. Killed or MissingInAction: load the raid and end it that way (ResolveController).
+        /// Chosen in Begin: the save's manifest (a combat save is always Killed), else the menu's request (Abandon).
+        /// </summary>
+        internal static ExitStatus? Outcome;
+
+        /// <summary>Set by the menu's Abandon before it starts the raid; taken by the next raid start.</summary>
+        internal static ResolveOutcome? Requested;
+
         /// <summary>Saved living bots' profiles by profile id, rebuilt from their sections.</summary>
         internal static readonly Dictionary<string, Profile> BotProfiles = new Dictionary<string, Profile>(StringComparer.Ordinal);
 
@@ -59,10 +71,12 @@ namespace SPSave.Game
         private static readonly Dictionary<Item, bool> FoundInRaid = new Dictionary<Item, bool>();
 
         internal static bool Loading => Phase == ResumePhase.Loading;
-        internal static bool Active => Phase == ResumePhase.Loading || Phase == ResumePhase.WaitingForReady;
+        internal static bool Active => Phase == ResumePhase.Loading || Phase == ResumePhase.WaitingForReady || Phase == ResumePhase.Resolving;
 
         internal static void TryBegin(TarkovApplication app)
         {
+            var requested = Requested ?? Plugin.TestOutcome();
+            Requested = null;
             Reset();
             if (!Plugin.ResumeEnabled.Value)
             {
@@ -70,7 +84,7 @@ namespace SPSave.Game
             }
             try
             {
-                Begin(app);
+                Begin(app, requested);
             }
             catch (Exception e)
             {
@@ -80,7 +94,7 @@ namespace SPSave.Game
             }
         }
 
-        private static void Begin(TarkovApplication app)
+        private static void Begin(TarkovApplication app, ResolveOutcome? requested)
         {
             var raid = app._raidSettings;
             var session = app.Session as ClientBackendSession;
@@ -187,9 +201,18 @@ namespace SPSave.Game
                     SainCompat.Pinned[bot.ProfileId] = bot.Personality;
                 }
             }
+            var outcome = ResolveRule.Choose(manifest.ResolveAs, requested);
+            Outcome = outcome == null ? (ExitStatus?)null
+                : outcome == ResolveOutcome.Killed ? ExitStatus.Killed : ExitStatus.MissingInAction;
             // Last: nothing above changes the game, so a failure before this line leaves a normal raid.
             session.Profile = profile;
             Phase = ResumePhase.Loading;
+            if (Outcome != null)
+            {
+                Plugin.Log.LogInfo($"This load ends the saved raid as {Outcome} ({(manifest.ResolveAs != null ? "saved in combat" : "requested")}).");
+                NotificationManager.DisplayMessageNotification($"SPSave: ending your saved raid on {map}.");
+                return;
+            }
 
             Plugin.Log.LogInfo($"Resuming the raid on {map} saved {manifest.CreatedUtc} (from {from}): {loot.Count} world entries, " +
                                $"{state.Doors.Count} doors, {BotProfiles.Count}/{state.Bots.Count} living bots, " +
@@ -261,6 +284,8 @@ namespace SPSave.Game
         internal static void Reset()
         {
             Phase = ResumePhase.None;
+            Outcome = null;
+            ResolveBlackout.End();
             SavePath = null;
             Manifest = null;
             State = null;
