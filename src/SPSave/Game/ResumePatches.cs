@@ -113,10 +113,32 @@ namespace SPSave.Game
             startTime = DateTimeExtensions.UtcNow - TimeSpan.FromSeconds(past);
             sessionTime = TimeSpan.FromSeconds(clock.SessionSeconds);
         }
+
+        /// <summary>The raid clock now reads the time played: restored wave timers count from this moment.</summary>
+        [PatchPostfix]
+        private static void Postfix(GameTimer __instance)
+        {
+            if (!ResumeSession.Loading || !ResumeSession.WavesRestored || Waves.Aligned
+                || Singleton<AbstractGame>.Instance?.GameTimer != __instance)
+            {
+                return;
+            }
+            Waves.Aligned = true;
+            try
+            {
+                Waves.AlignToRaidClock();
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogError("Aligning wave timers to the raid clock failed; waves may come a few seconds early. " + e);
+            }
+        }
     }
 
     /// <summary>
-    /// No fresh bots in a resumed raid until B2 step 3 trims the saved waves (their timers would restart from zero).
+    /// Fresh spawns in a resumed raid. With the saved waves restored (Waves) they go ahead, and each boss or PMC wave
+    /// is logged with the raid time, to check the schedule. Without them (a save from before 0.4.0, or a failed
+    /// restore) they are held: the server's waves would start again from zero.
     /// Every fresh spawn passes one of three BotsController methods: old waves and ABPS's scav trickle
     /// (ActivateBotsByWave(SpawnWave)), boss, PMC and quest waves (ActivateBotsByWave(BossLocationSpawn), the
     /// BossSpawnScenario action in LocalGame.Create), and ActivateBotsWithoutWave. Restored bots don't.
@@ -128,10 +150,15 @@ namespace SPSave.Game
     {
         private static int _held;
 
-        internal static bool Allow(string what)
+        internal static bool Allow(string what, bool log = false)
         {
             if (!ResumeSession.HoldFreshSpawns)
             {
+                if (log && ResumeSession.Phase != ResumePhase.None)
+                {
+                    var timer = Singleton<AbstractGame>.Instance?.GameTimer;
+                    Plugin.Log.LogInfo($"Resumed raid: {what} spawning at raid time {timer?.PastTime.TotalSeconds:F0} s.");
+                }
                 return true;
             }
             if (_held++ == 0)
@@ -167,7 +194,7 @@ namespace SPSave.Game
             AccessTools.Method(typeof(BotsController), nameof(BotsController.ActivateBotsByWave), new[] { typeof(BossLocationSpawn) });
 
         [PatchPrefix]
-        private static bool Prefix(BossLocationSpawn wave) => FreshSpawnGate.Allow($"boss wave {wave?.BossType}");
+        private static bool Prefix(BossLocationSpawn wave) => FreshSpawnGate.Allow($"boss wave {wave?.BossType}", log: true);
     }
 
     internal sealed class FreeSpawnGatePatch : ModulePatch

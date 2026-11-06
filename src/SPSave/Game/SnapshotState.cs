@@ -28,6 +28,75 @@ namespace SPSave.Game
         public List<DoorState> Doors = new List<DoorState>();
         public ClockState Clock;
         public CombatState Combat;
+        /// <summary>Null in saves before 0.4.0: those resume with fresh spawns held.</summary>
+        public WavesState Waves;
+    }
+
+    /// <summary>
+    /// The raid's spawn waves as they stood (see Core.WaveTrim): BossLocationSpawn as the scenario holds them (after
+    /// LocalGame.Create's adjustments), copied field by field. Not the game's JSON (0.4.0 used it): its
+    /// Vector3NullableSerializer can't read back the null PerfectPos it writes.
+    /// </summary>
+    public sealed class WavesState
+    {
+        /// <summary>Time.time between BossSpawnScenario.Run and the save; -1 if it never ran.</summary>
+        public float BossElapsed = -1f;
+        public List<BossWaveState> Boss = new List<BossWaveState>();
+        /// <summary>Time.time between WavesSpawnScenario.Run(AfterGameStarted) and the save; -1 if old waves are off.</summary>
+        public float OldElapsed = -1f;
+        public List<OldWaveState> Old = new List<OldWaveState>();
+        /// <summary>ABPS's per-player cap on the scav trickle (Utility.BotsSpawnedPerPlayer); null without ABPS.</summary>
+        public double? AbpsBotsSpawnedPerPlayer;
+    }
+
+    public sealed class BossWaveState
+    {
+        // BossLocationSpawn's serialized fields.
+        public string BossName;
+        public float BossChance;
+        public string BossZone;
+        public bool BossPlayer;
+        public string BossDifficult;
+        public string BossEscortDifficult;
+        public string BossEscortType;
+        public string BossEscortAmount;
+        public float Time;
+        public float Delay;
+        public string TriggerId;
+        public string TriggerName;
+        public bool IgnoreMaxBots;
+        public bool ForceSpawn;
+        public bool DependKarma;
+        public float[] PerfectPos;
+        public List<SupportState> Supports;
+        public bool ShowOnTarkovMap;
+        public bool ShowOnTarkovMapPvE;
+        // Rolled by BossLocationSpawn.Init; put back after the resume's Init rolls them again.
+        public bool ShallSpawn;
+        public bool Activated;
+        public string BornZone;
+        public int EscortCount;
+    }
+
+    public sealed class SupportState
+    {
+        public EFT.WildSpawnType BossEscortType;
+        public int BossEscortAmount;
+        public string[] BossEscortDifficult;
+    }
+
+    /// <summary>One EFT.SpawnWave (old-style scav wave), as WavesSpawnScenario.Init rolled it.</summary>
+    public sealed class OldWaveState
+    {
+        public float Time;
+        public int BotsCount;
+        public global::BotDifficulty Difficulty;
+        public EFT.WildSpawnType WildSpawnType;
+        public string SpawnAreaName;
+        public EFT.EPlayerSide Side;
+        public bool IsPlayers;
+        public float ChanceGroup;
+        public bool KeepZoneOnSpawn;
     }
 
     public sealed class PlayerState

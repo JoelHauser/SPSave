@@ -1,3 +1,33 @@
+# B2 step 3: spawning carries on after a resume (0.4.2)
+
+0.4.1 passed 2026-11-06: saved at 7:03, the 8:20 PMC waves fired 77 s after resume, at raid time 491/496 s (about
+7 s early: resume loading). 0.4.2 aligns the wave timers to the raid clock; expect ~498 s and a line
+`Wave timers aligned to the raid clock (loading time): N boss wave timers +X s`.
+
+0.4.0 run 2026-11-06: the saved boss waves did not read back (game JSON fails on a null PerfectPos), so the resume
+spawned no PMC waves; bots and personalities were fine. 0.4.1 saves waves in state.json itself.
+
+About 10 minutes. ABPS's first PMC wave here comes 500 s into the raid (`delayBeforeFirstWave`), so the save goes
+just before it and the resume should bring that wave about a minute later, not 500 s later.
+
+**First raid, Factory (day), naked PMC:**
+
+1. Stay hidden until about **13:30 into the raid** (Factory is 50 min here: the timer shows about 36:30 left). Out
+   of contact. On Factory ABPS makes only two PMC waves, at 500 s and 860 s (8:20 and 14:20): it stops 1500 s before
+   the end. Save before 14:20 or there is nothing left to come (0.4.1 run at 19:10: 9/9 waves had fired, correctly).
+2. Press **Ctrl+F10**.
+
+**Relaunch, start Factory (day), Ctrl+F11 when it loads, then stay put for about 2 minutes. Leave.**
+
+**Send back** every `SPSave` line from `BepInEx\LogOutput.log`. At save time:
+- `Save check: N boss waves (F fired, T s in) and ... read back`.
+
+On resume:
+- `Resuming the raid ... N boss and N old-style waves saved` and `Waves restored: K/N boss waves to come (next X s: ...)`:
+  the starting PMCs and anything already fired are gone; the next PMC wave is about (860 − 810) s away.
+- `Resumed raid: boss wave pmcUSEC/pmcBEAR spawning at raid time ~860 s`: the wave fired on the raid's clock.
+- No `Holding fresh bot spawns` line. Restored bots still come back as in step 2.
+
 # B2 step 2: living bots come back (0.3.1)
 
 0.3.0 run 2026-11-06 (Factory): 5/5 bots back at their exact saved positions, 3 PMCs known to ABPS, fresh spawns

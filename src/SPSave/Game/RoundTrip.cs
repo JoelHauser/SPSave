@@ -7,6 +7,7 @@ using EFT.BinarySerialization;
 using EFT.Weather;
 using Mirror;
 using Newtonsoft.Json;
+using SPSave.Core;
 
 namespace SPSave.Game
 {
@@ -133,6 +134,8 @@ namespace SPSave.Game
                 }
             }
 
+            CheckWaves(sections);
+
             return new RoundTripResult
             {
                 Ok = problems.Count == 0,
@@ -140,6 +143,41 @@ namespace SPSave.Game
                     ? $"{profiles} profiles and {worldIds} world items round-trip"
                     : string.Join("; ", problems)
             };
+        }
+
+        /// <summary>
+        /// Saved boss waves must read back in the order their state was saved. Only a warning: a resume without them
+        /// still works, it just spawns no more boss or PMC waves.
+        /// </summary>
+        private static void CheckWaves(Dictionary<string, byte[]> sections)
+        {
+            try
+            {
+                if (!sections.TryGetValue(RaidCapture.StateSection, out var stateBytes))
+                {
+                    return;
+                }
+                var waves = JsonConvert.DeserializeObject<RaidState>(Encoding.UTF8.GetString(stateBytes))?.Waves;
+                if (waves == null)
+                {
+                    Plugin.Log.LogWarning("Save check: no spawn waves saved; a resume will hold fresh spawns.");
+                    return;
+                }
+                // Waves.Restore needs every boss wave's type name; Init parses it.
+                var unnamed = waves.Boss?.Count(w => string.IsNullOrEmpty(w.BossName)) ?? 0;
+                if (unnamed > 0)
+                {
+                    Plugin.Log.LogWarning($"Save check: {unnamed} saved boss waves have no type; a resume will spawn no more boss or PMC waves.");
+                    return;
+                }
+                var toCome = waves.Boss?.Count(w => WaveTrim.Boss(w.Time, !string.IsNullOrEmpty(w.TriggerName), w.ShallSpawn, w.Activated, waves.BossElapsed) != null) ?? 0;
+                Plugin.Log.LogInfo($"Save check: {waves.Boss?.Count ?? 0} boss waves ({toCome} still to come, {waves.BossElapsed:F0} s in) " +
+                                   $"and {waves.Old.Count} old-style waves ({waves.OldElapsed:F0} s in) read back.");
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogWarning("Save check: spawn waves don't read back; a resume will spawn no more boss or PMC waves: " + e.Message);
+            }
         }
 
         private static string Describe(EFT.InventoryLogic.Item item)

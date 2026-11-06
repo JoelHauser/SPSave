@@ -107,6 +107,16 @@ namespace SPSave.Game
             state.Combat = new CombatState { WindowSeconds = combatWindowSeconds, InCombat = verdict.InCombat, Detail = verdict.Describe() };
             report.InCombat = verdict.InCombat;
             report.CombatDetail = verdict.Describe();
+            // Spawn waves to come. Without them a resume holds fresh spawns instead of failing.
+            try
+            {
+                state.Waves = Waves.Capture();
+            }
+            catch (Exception e)
+            {
+                state.Waves = null;
+                Plugin.Log.LogWarning("Spawn waves not captured; a resume will hold fresh spawns: " + e);
+            }
             report.BotsMs = Lap(watch);
 
             // World loot: loose items, containers with their current contents, corpses with their pose.

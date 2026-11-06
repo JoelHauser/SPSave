@@ -37,6 +37,8 @@ namespace SPSave.Game
             Run("weather", notes, () => notes.Add(RestoreWeather()));
             Run("time of day", notes, () => notes.Add(RestoreTimeOfDay(world, state.Clock)));
             Run("bots", notes, () => notes.Add(BotRestore.Spawn(game as IBotGame, state)));
+            // ABPS reset its count in its BotsController.Init postfix, which ran before the game started.
+            Run("ABPS", notes, () => notes.Add(AbpsCompat.WriteSpawnedPerPlayer(state.Waves?.AbpsBotsSpawnedPerPlayer)));
 
             Plugin.Log.LogInfo("Raid restored: " + string.Join("; ", notes.Where(n => !string.IsNullOrEmpty(n))));
         }

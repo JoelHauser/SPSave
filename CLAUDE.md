@@ -30,9 +30,22 @@ Save & Quit; starting a PMC raid on the save's map resumes it, frozen until Ctrl
    bundles join the preload, and bots keep their saved found-in-raid flags. B1's `NoBots` is gone (it also left
    `_canSpawn` false, so no `OnBeingHit`/`OnKill` for restored bots); `FreshSpawnGate` holds every fresh spawn in a
    resumed raid instead.
-3. Let spawning continue: save the location's `BossLocationSpawn[]` and `Waves` (ABPS re-randomizes them on server
-   restart), per-wave `ShallSpawn`/`Activated`; on resume drop fired and start waves, shift the rest by the time
-   played, keep `ShallSpawn`. Then `FreshSpawnGate` goes.
+3. **0.4.0 in game 2026-11-06: boss waves didn't survive the save** (the game's JSON `Vector3NullableSerializer`
+   can't read back the null `PerfectPos` it writes); bots and personalities fine. **0.4.1 passed in game**: saved at
+   423 s, 4/7 waves restored, PMC waves fired at raid time 491/496 s against ~498/503 s originally: ~7 s early, the
+   longer loading between the scenario's `Run` and the raid timer's start on a resume. **0.4.2 (not yet tested)**
+   pushes the restored wave timers (`ITimer.Restart`) and wave `Time`s back by that gap when the raid timer starts
+   (`Waves.AlignToRaidClock`, postfix on `GameTimer.Start`). `Waves`
+   copies the boss scenario's `BossLocationSpawn[]` field by field into state.json (after `LocalGame.Create`'s
+   in-place adjustments) with each wave's rolled `ShallSpawn`/`Activated`/`BornZone`/`EscortCount`, the old-style
+   `SpawnWaves`, and `Time.time` since each scenario's `Run` (timers count from there, not from the raid timer).
+   Bosses here spawn only at raid start (start waves, dropped on resume), so what carries on is ABPS's PMC waves
+   (every 360 s from 500 s) and trigger waves. On resume, a postfix on `LocalGame.Create` rebuilds the boss scenario from
+   the saved waves and replaces `SpawnWaves`, trimmed by `Core.WaveTrim` (fired and start waves dropped, the rest
+   shifted, `ShallSpawn` kept). The server's waves are ignored (ABPS re-randomizes them on restart). ABPS's
+   `BotsSpawnedPerPlayer` is restored. `FreshSpawnGate` now holds only when a save has no waves (before 0.4.0).
+   Known gaps: a boss wave activated but still in its `Delay` at save is lost; `Init` re-rolls the difficulty of
+   `Supports` escorts; Halloween zombie events aren't handled.
 4. Test on Factory with living scavs: same bots (profile ids), same places, same gear; then a second save and resume.
 Bots come back unaware of the player (Joel's decision; combat saves are refused).
 
@@ -134,5 +147,6 @@ Decompile with `ilspycmd` (global tool) when a new API is needed; never guess me
 
 - Capture is read-only. A failed save must leave the raid exactly as it was.
 - Nothing per frame in normal play. Step A's hotkey check is the only exception and goes away with the menu button.
-  Anything that has to be recorded during play needs a reason here (currently: weather nodes, once per raid).
+  Anything that has to be recorded during play needs a reason here (currently: weather nodes, once per raid; the
+  `Time.time` each wave scenario ran at, once per raid, because wave timers count from it and the game keeps no copy).
 - Release zips hold only `BepInEx/plugins/SPSave.dll`. Version in the csproj and `Plugin.Version`.

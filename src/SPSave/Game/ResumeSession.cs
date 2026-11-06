@@ -43,11 +43,14 @@ namespace SPSave.Game
         /// <summary>Saved living bots' profiles by profile id, rebuilt from their sections.</summary>
         internal static readonly Dictionary<string, Profile> BotProfiles = new Dictionary<string, Profile>(StringComparer.Ordinal);
 
+        /// <summary>Set once the saved waves replaced the server's (LocalGameCreatePatch).</summary>
+        internal static bool WavesRestored;
+
         /// <summary>
-        /// A resumed raid gets no fresh bots (waves, bosses, the scav trickle) until B2 step 3 trims the saved waves:
-        /// their timers would start again from zero. Holds until the next raid starts.
+        /// Fresh spawns are held in a resumed raid whose waves couldn't be restored (a save from before 0.4.0, or a
+        /// failure): the server's waves would start again from zero. Holds until the next raid starts.
         /// </summary>
-        internal static bool HoldFreshSpawns => Phase != ResumePhase.None;
+        internal static bool HoldFreshSpawns => Phase != ResumePhase.None && !WavesRestored;
 
         internal static bool IsRestoredBot(Profile profile) =>
             profile != null && profile.Id != null && BotProfiles.TryGetValue(profile.Id, out var restored) && ReferenceEquals(restored, profile);
@@ -190,7 +193,8 @@ namespace SPSave.Game
 
             Plugin.Log.LogInfo($"Resuming the raid on {map} saved {manifest.CreatedUtc} (from {from}): {loot.Count} world entries, " +
                                $"{state.Doors.Count} doors, {BotProfiles.Count}/{state.Bots.Count} living bots, " +
-                               $"{state.Clock?.RemainingSeconds:F0} s left. No fresh spawns this raid (waves come in B2 step 3).");
+                               $"{state.Clock?.RemainingSeconds:F0} s left, " +
+                               (state.Waves == null ? "no saved waves (fresh spawns held)." : $"{state.Waves.Boss.Count} boss and {state.Waves.Old.Count} old-style waves saved."));
             NotificationManager.DisplayMessageNotification($"SPSave: resuming your saved raid on {map}.");
         }
 
@@ -264,6 +268,7 @@ namespace SPSave.Game
             Loot = null;
             Weather = null;
             BotProfiles.Clear();
+            WavesRestored = false;
             SainCompat.Pinned.Clear();
             SainCompat.Logged.Clear();
             FreshSpawnGate.Reset();
