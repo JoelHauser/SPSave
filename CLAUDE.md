@@ -144,110 +144,66 @@ riskiest first:
    - Combat saves at capture: done in D (pause-menu button with a stock confirmation).
    - Known gap: if the resume fails to load the save after RECONNECT, the raid starts fresh on the saved map; its
      raid end then unlocks and the next menu discards the save (no duplication: the stash was locked throughout).
-Then D (pause-menu button, Ready to Resume prompt, version and mod-list checks, release).
-**D built 2026-11-06 (0.8.0, not yet tested in game; TEST-PLAN.md D1):**
+**D, pause menu and resume polish: done and passed in game by 2026-11-07** (client 0.9.7). What it is now:
 - `PauseMenuButtonPatch` (postfix on `MenuScreen.ChangeScreenInGameStatus`): SAVE & QUIT is a clone of the stock
-  `_disconnectButton` (LEAVE) with our label (`DefaultUIButton.SetRawText`), above it, shown only in the in-raid layout
-  and not while frozen or ending. While frozen before Ready, LEAVE is hidden: it would send `local/end` (Left) with
-  the saved profile though the save isn't used up yet.
-- **0.8.0 in game 2026-11-06:** the clone sat exactly on LEAVE (labels overlapped; the parent doesn't stack its children,
-  so sibling order does nothing). **0.8.1:** SAVE & QUIT goes one stock step (LEAVE→RESUME distance, world space) below
-  LEAVE, where RESUME (`_hideScreenButton`) was, and RESUME moves down one step (put back when the button hides).
-  LEAVE stays put; there is no room above it. Logs "Pause menu layout:" once (parents, layout groups, sizes).
-- **Trap (0.8.2):** `ItemUiContext.ShowMessageWindow` in a raid (`InGameStatus.InRaid`) skips the window and runs the
-  accept action at once unless `forceShow: true`. 0.8.0/0.8.1 saved in combat without asking and accepted Ready
-  unseen. Every in-raid dialog passes `forceShow`; the combat question now has a No (logged).
-- 0.8.2: a combat save's reconnect screen opens EFT's message window (caption `"Attention".Localized()`, OK only):
-  "You quit this raid during combat, so you were killed. The gear you took in is lost." (Joel asked for it.)
-- **0.8.2 in game 2026-11-06:** combat question shown, No logged, raid went on. READY window shown but no cursor (Y/N
-  keys worked) and the mouse turned the camera upside down while frozen. **0.8.3:** the window raises the game's
-  `ToggleShowInGameCursorEvent` (as `LighthouseKeeperZone`; a `DialogWindow`'s `ShouldLockCursor` is Ignore), off on
-  Ready; `Freeze` also skips `GamePlayerOwner.TranslateAxes` (`DialogWindow.TranslateAxes` passes the mouse on).
-  Text now "Ready to continue?" (the window has YES/NO).
-- **0.8.3 in game:** cursor showed but no click or hover; character faced the wrong way. In a raid `BattleUIScreen`
-  calls `UIEventSystem.Instance.Disable()`. **0.8.4:** `UIEventSystem.Instance.SetTemporaryStatus(true)` while the
-  window is up (the console's override), off on Ready. Saved look is re-applied after the unfreeze; "Look direction"
-  lines log it at freeze and at Ready (saved / was / now) to find what turns it.
-- **0.8.5 (Joel, 2026-11-06): no Ready window at all.** `ReadyController` holds the raid (Freeze) only until
-  PreloaderUI's black overlay is gone, then runs Ready itself a frame later. No `Time.timeScale`, cursor or pointer
-  override. Ctrl+F10 and Ctrl+F11 removed (config entries too): no per-frame code in normal play. Look direction is
-  re-applied after the unfreeze and logged. `SnapshotFile.Retire` now prunes `used\` to the newest
-  `UsedSavesKept` (3) stamped folders; other folders there are left alone.
-- **0.8.5 in game 2026-11-06:** straight back in, look direction logged identical (saved = at freeze = at Ready), so
-  the earlier "wrong way" was only the frozen camera. But Joel: arms held out as if holding a weapon, then about a
-  second without control: `Freeze` disabled the player for the whole fade (4 s), so it never animated. **0.8.6:**
-  `Freeze` deleted; nothing is held during the fade (as a normal raid start). `ReadyController` still waits for the
-  overlay, then uses up the save, unlocks and shifts the timer/panels by the fade time (same maths as tested).
-- Combat save: from the button, a stock confirmation, then the manifest gets `ResolveAs = "Killed"`. Combat is judged
-  again after the answer. Ctrl+F10 stays as a fallback until the button is confirmed (then it and its per-frame key
-  check go); it still refuses in combat.
-- Ready: the `OnGUI` label is gone; a stock `ItemUiContext.ShowMessageWindow` (caption `"READY".Localized()`) opens
-  0.6 s before time stops; accepting sets a flag that `Update` acts on a frame later. Escape re-asks. Ctrl+F11 stays.
-- Reconnect screen: another game build shows only LEAVE, which discards the save and unlocks (as a hard exit) and
-  reopens `MainMenu()` (untested path). Missing or changed mods (`Core.ModListCheck`; SPSave itself ignored) ask
-  before RECONNECT; added mods are only logged. A No on any reconnect-screen question is logged.
+  `_disconnectButton` (LEAVE) with our label. The parent doesn't stack its children, so `Targets` places one evenly
+  spaced column in world space: LEAVE, SAVE & QUIT, RESUME (`_hideScreenButton`), and Pit FireTeam's SQUAD SETTINGS
+  when present (step halfway between the stock and Pit's). `LayoutKeeper` rechecks a frame and 0.3 s after opening
+  (Pit FireTeam restores recorded positions on every Show) and logs "something moved the buttons" when it corrects.
+  Hidden in Scav raids, while finishing a resume and while ending one. LEAVE is hidden during the loading fade.
+- Combat save: stock confirmation, then manifest `ResolveAs = "Killed"`; combat is judged again after the answer. The
+  combat save's reconnect screen shows EFT's message window (caption `"Attention".Localized()`, OK only) and only LEAVE.
+- No Ready window, no freeze, no hotkeys (Joel): `ReadyController` waits for PreloaderUI's black overlay to go, then
+  uses up the save, unlocks and shifts the raid timer and panels by the fade time. Nothing runs per frame in play.
+- `SnapshotFile.Retire` prunes `used\` to the newest 3 stamped folders; a second retire in one second gets `-2`.
+- Reconnect screen: another game build shows only LEAVE (discards the save, untested path). Missing or changed mods
+  (`Core.ModListCheck`, SPSave itself ignored) ask before RECONNECT; added mods are only logged.
+- Traps learned: `ItemUiContext.ShowMessageWindow` in a raid accepts at once unless `forceShow: true`. In a raid
+  `BattleUIScreen` disables `UIEventSystem` (a cursor alone can't click). Disabling the player (old `Freeze`) froze
+  its animation: arms stuck, a second without control. `AccessTools.TypeByName` scans every loaded type (a 955 ms
+  save with this mod list): look types up in the other mod's own assembly.
 
-Repo: C3 and D are committed and pushed on branch `c-server` (2026-11-07, on top of `c3ed226`); `b2-bots` is pushed;
-nothing is merged to main after B1. Test zips in `dist/` (ignored by git): latest `SPSave-0.8.0-D-test.zip`.
+**Pit FireTeam compatibility (Joel: required): passed in game 2026-11-07** (Pit FireTeam 1.1.1 + Menu Overhaul 1.3.0,
+Factory). Design and verified members: docs/PITFIRETEAM-COMPAT.md. `Game/PitFireTeamCompat.cs`, reflection only;
+every member checked against the installed DLLs; a missing member refuses saves with living followers.
+- Save: `RaidState.PitFollowers` (squadmate / bossAlly / recruit, ids, Pit's protected and tracked item ids).
+- Resume: `PitSquadPatch` (postfix on `SendRaidSettings`, `Priority.Last`, after Pit's own) replaces Pit's spawn lists
+  with the saved squad and fills its transit cache (`FollowerTransitStateCache.StatesByKey`), sets `RaidTransit`;
+  Pit FireTeam spawns them itself; `BotRestore` skips them. Pit spawns in `LocalGame.vmethod_1` next to the player's
+  *fresh* spawn, before `vmethod_6` moves the player, so `SquadPlacer` moves each to its saved spot once registered
+  (Pit's own `BeginTeleportGrace`, `Mover.Stop`, `Player.Teleport`). Recruits: `ShallBeFollower`, then `AddFollower`.
+- Abandon/Killed: no squad spawned; F12 "Teammates when a saved raid is abandoned or killed": `ShareYourFate` posts
+  each squadmate lost to `/singleplayer/pitfireteam/teammate/raid-outcomes`; `ComeHomeSafe` posts nothing.
+- Server 0.8.0 `PitFireTeamLock`: refuses 9 gear/roster methods on `FriendlyTeammateCallbacks` while locked.
+- Menu clash fixed (`Game/MenuPositionsPatch.cs`): Menu Overhaul doesn't lay out the reconnect-mode menu, and Pit
+  FireTeam records button positions the first time it sees the MenuScreen and restores them on every Show, so after
+  a resumed raid it put stock positions over Menu Overhaul's layout. The record is cleared before each
+  `MainMenuScreenController` Show when Menu Overhaul is loaded. (`_reconnectAvailable` is set after Show: unusable.)
+- Not yet seen in game: recruits rejoining, boss allies, Abandon/Killed with a squadmate. Report the menu-record
+  behaviour to pitAlex (it keeps whatever layout it sees first).
+
+Repo: everything through 0.9.7 / server 0.8.0 is committed and pushed on `c-server` (`5a9cac9`, 2026-11-07), which
+contains `b2-bots`; `main` has B1 plus the README. Test zips in `dist/` (ignored by git), latest `SPSave-0.9.6-test.zip`.
 
 ## Upcoming steps (as of 2026-11-07, in order)
 
-1. **D1 in game** (0.8.0, TEST-PLAN.md D1, Factory): SAVE & QUIT button (looks like LEAVE, saves and closes), the
-   stock Ready window (cursor shows, its button works with time stopped), no LEAVE while frozen, a combat save
-   (confirmation, then Leave-only and Killed), optionally the mod check. Fix what it finds.
-2. **Done in 0.8.5:** hotkeys dropped, Ready window dropped, used saves pruned (TEST-PLAN D2, not yet run).
-3. **Other maps.** Only Factory has been resumed so far. One short Customs run first: weather restore (never run in
-   game: Factory has none; Forecaster installed), day/night time variant from the menu, and a real boss with followers
-   (Reshala) if one is near. Then, as Joel has time: Interchange (power switch, Killa), Reserve (D2 lever), Labs
-   (keycard check at the menu's Ready and no second keycard use), a big map load (Streets or Lighthouse).
-4. **Known gaps to decide with Joel** (not started): a resume that fails to load after RECONNECT starts a fresh raid
-   on the saved map (save then discarded at raid end, no duplication); the other-build discard path (reopening
-   `MainMenu()`) is untested; open B notes (a boss wave still in its `Delay` at save is lost, `Supports` escorts
-   re-roll difficulty, Halloween zombies not handled, small per-session stats lost). BTR, airdrops, artillery, transits
-   and seasonal events don't come back (DESIGN.md).
-5. **Merge** `c-server` (which contains `b2-bots`) to main when Joel says; commit and push each later step when he asks.
-6. **Release** (only after Joel's in-game checks with his usual mods): README rewritten for players (install both DLLs,
-   restart the server, what comes back and what doesn't), version 1.0.0 in both csprojs, `Plugin.Version` and the
-   server `ModMetadata`, a license (none yet; the server metadata says "All rights reserved" until Joel picks one),
-   release zip per Rules, GitHub release. Never call it release-ready before those checks.
-
-**Pit FireTeam compatibility (Joel, 2026-11-06: required).** Pit FireTeam 1.1.1 installed in `H:\SPT4.1.X`.
-Step 1 (API check) done: docs/PITFIRETEAM-COMPAT.md. Steps 2–5 built 2026-11-07 (client 0.9.0, server 0.8.0),
-every reflected member checked against the installed DLLs; not yet run in game (TEST-PLAN P1).
-0.9.0 save with squadmate barness passed (log); 1.3 s save hitch from `AccessTools.TypeByName` → 0.9.1 looks types up
-in Pit FireTeam's own assembly at raid start. 0.9.1 resume: "carried back barness", 8 bots + 1 by Pit FireTeam, no
-errors (Pit FireTeam logs Info only in debug builds). Pause menu with Pit FireTeam: RESUME showed back under SAVE &
-QUIT, SQUAD SETTINGS (Pit's `pitFireTeam_RaidSettingsButton`, RESUME anchored − (height + 5)) below; nothing in the
-game or Pit FireTeam was found moving RESUME. 0.9.2: `Arrange` also keeps Pit's button under RESUME; `LayoutKeeper`
-rechecks a frame and 0.3 s after opening and logs "something moved the buttons". The loadout-refusal check can't be
-done from the client: My Squad isn't reachable from the reconnect screen (server lock is the backstop).
-0.9.3 (review, built, not deployed while Joel tested 0.9.2): SAVE & QUIT hidden and refused in Scav raids
-(`CaptureController.ScavRaid`: a resume rebuilds PMC raids only); two retires in one second no longer collide
-(`used\<stamp>-2`, test `RetireTwiceInOneSecondKeepsBoth`); Abandon/Killed doesn't report the squad when Pit FireTeam
-is gone; `ResumePhase.WaitingForReady` renamed `Finishing`, stale freeze/Ready wording removed; `LockStatus`
-properties (no warnings left). 0.9.2 in game: menu order right (DISCONNECT, SAVE & QUIT, RESUME, SQUAD SETTINGS) but
-gaps 140/140/80; save hitch fixed (bots 245 ms, was 955). 0.9.3 also spaces the four rows evenly when Pit FireTeam's
-button is there (step halfway between stock and Pit's; `PauseMenuButtonPatch.Targets`). Installed 2026-11-07.
-0.9.4: Pit FireTeam spawns the carried squad in `LocalGame.vmethod_1` (SpawnAction) next to the player's *fresh*
-spawn point, before vmethod_6 moves the player; `PitFireTeamCompat.SquadPlacer` moves each to its saved spot once
-registered (Pit's own teleport calls). Open bug (2026-11-07): after save → RECONNECT (with a Pit teammate) → extract,
-the main menu came back in the stock top-left layout instead of Menu Overhaul's. A normal raid without a teammate
-was fine. Not the menu environment (same "EnvironmentUISceneFactory not found" warnings in the good run). Suspect:
-Pit FireTeam's `CaptureOriginalButtonPositions`/`RestoreOriginalButtonPositions` vs Menu Overhaul's button layout
-order. 0.9.5 adds `MenuDiagnosticsPatch` (logs main-menu button positions and Overhaul's in-game flag after each
-MenuScreen.Show; remove once the cause is known).
-Cause found (0.9.5 log, 2026-11-07): the reconnect-mode menu (`MainMenuReconnectScreenController`) is not laid out by
-Menu Overhaul (stock anchors 0.0, x 0), and Pit FireTeam's `SquadControlMenuUi.EnsureSquadButton` records each
-button's position the first time it sees the MenuScreen (`originalButtonPositions`) and restores it on every Show.
-After the resumed raid Menu Overhaul set its anchors (0.5) and Pit FireTeam put the stock positions back. A normal
-raid, with or without the pause menu, was fine. 0.9.6 `MenuPositionsPatch` (prefix on `MenuScreen.Show(controller)`)
-clears that record before a `MainMenuScreenController` Show when Menu Overhaul is loaded
-(`PitFireTeamCompat.ForgetMenuPositions`). `_reconnectAvailable` can't be used: it is set in ShowAction, after Show.
-**0.9.6 passed in game 2026-11-07** (Factory, Pit FireTeam + Menu Overhaul): save → RECONNECT → extract; teammate
-"sasda" carried back and placed at its saved spot (97 m from Pit's spawn); menu record cleared, Menu Overhaul layout
-after the raid; no errors. 0.9.7 removes the diagnostic (`MenuDiagnosticsPatch`); the fix is `Game/MenuPositionsPatch.cs`. Plan: resume saved squadmates through its transit path
-(`FollowerTransitStateCache`, `spawnMemberIds`, `RaidTransit`, all internal: reflection), lock its teammate/gear routes
-while a save waits, report teammate outcomes for Abandon/Killed. Open: recruits, Abandon/Killed for teammates.
+1. **Customs run** (short: about 4 minutes near spawn, SAVE & QUIT, RECONNECT, look around, extract or LEAVE): weather
+   restore (Factory has none; a Customs resume ran once with "weather 550 nodes" but wasn't checked), night time
+   variant, Reshala and his guards if near. With Pit FireTeam: one Abandon with a squadmate (log "squadmate(s)
+   reported lost", My Squad shows it) and, if possible, a recruit before saving ("recruit back as your follower").
+2. **Other maps** as Joel has time: Interchange (power switch, Killa), Reserve (D2 lever), Labs (keycard check at
+   RECONNECT, no second keycard use), a big map load (Streets or Lighthouse).
+3. **Known gaps to decide with Joel:** a removed mod whose items are in the save makes RECONNECT start a fresh raid (no
+   duplication; better: check templates first and offer only LEAVE); SPT version not recorded; client mod removed
+   while the server holds a lock leaves the profile locked; daily-quest rotation while a save waits (raid end copies
+   the saved quests; unchecked). Older B notes: a boss wave in its `Delay` at save is lost, `Supports` escorts re-roll
+   difficulty, Halloween zombies, small per-session stats. BTR, airdrops, artillery, transits, seasonal events don't
+   come back (DESIGN.md).
+4. **Merge** `c-server` into main when Joel says; commit and push each later step when he asks.
+5. **Release** only after Joel's checks with his usual mods: version 1.0.0 in both csprojs, `Plugin.Version` and the
+   server `ModMetadata`; a license (none yet); README and mod page (`docs/MOD-DESCRIPTION.md`: add Pit FireTeam to
+   Compatibility, remove the "Testing build" box); release zip per Rules; GitHub release. Never call it release-ready
+   before those checks.
 
 ## How the resume hooks in (B1)
 
@@ -259,8 +215,9 @@ startTime = now − played; fresh bot spawns are held (`FreshSpawnGate`, three `
 `Profile.SetSpawnedInSession(false)` and `RemoveUsedLocationKeycard` are skipped; `vmethod_6` keeps `_entryPoint` and
 skill fatigue, then `RaidRestore` places the player and sets effects, doors (`SetInitialSyncState`), weather (private
 `backendWeatherCurve`, bypassing `SetWeatherNodes` because Forecaster rewrites its nodes) and time
-(`GameDateTime.ResetForce`). `PrefabPathsPatch` adds corpse head/clothing bundles to that preload (else "usec_head_5.bundle is not loaded", no bodies). `ReadyController` freezes through `Freeze` (Pause mod's method, patches installed only while frozen: timeScale 0 alone let player updates run with dt 0 and broke the camera and collisions), stops time only after PreloaderUI's black overlay fades (it steps by `Time.deltaTime`), and, on Ready, shifts the timer and
-`MainTimerPanel._dateTime` by the frozen time (Pause mod's method).
+(`GameDateTime.ResetForce`). `PrefabPathsPatch` adds corpse head/clothing bundles to that preload (else "usec_head_5.bundle is not loaded", no bodies). `ReadyController` (no freeze since 0.8.6) waits for PreloaderUI's black overlay to fade, then uses up the save and
+shifts the raid timer and `MainTimerPanel._dateTime` by the fade time (Pause mod's method). "Ready" in the history
+above means that moment.
 The in-raid `ActiveHealthController` ignores `UpdateTime`, so time away doesn't regenerate health. Corpses load their
 own customization (`Corpse.Init` → `InitBody`).
 
@@ -271,7 +228,7 @@ Target install: `H:\SPT4.1.X` (SPT 4.1.6, EFT 0.16.9.40743). Repo https://github
 - Save in combat resolves as Killed on next launch. Abandon is MIA. Both resolve by loading the raid behind the
   loading screen and ending it through the game's own `GameEnd` (changed from "without loading" on 2026-11-06, so
   XP, counters and fail-on-death quests apply exactly as normal).
-- Hard exit (Alt-F4, crash) scraps the raid like standard SPT. A save is used up on Ready to Resume.
+- Hard exit (Alt-F4, crash) scraps the raid like standard SPT. A save is used up when the resume finishes loading.
 - No combat continuity: restored bots start fresh. Don't add awareness seeding.
 - All UI must look like stock EFT: reuse the game's own screens, buttons, dialogs and text; no custom styling. Our
   own words only where EFT has none (dialog sentences, the SAVE & QUIT label).
@@ -289,11 +246,14 @@ Target install: `H:\SPT4.1.X` (SPT 4.1.6, EFT 0.16.9.40743). Repo https://github
 - `src/SPSave/Game`: capture (`RaidCapture`, `CaptureController`, `PauseMenuButton`), resume (`ResumeSession`,
   `ResumePatches`, `RaidRestore`, `BotRestore`, `Waves`, `ReadyController`), ending as Killed/MIA
   (`ResolveController`, `ResolveBlackout`), the locked menu (`SavedRaidMenu`), server calls (`LockClient`), SAIN/ABPS
-  compatibility.
+  compatibility, Pit FireTeam (`PitFireTeamCompat`, `MenuPositionsPatch` for its clash with Menu Overhaul).
 - `tests/SPSave.Tests`: plain .NET, `dotnet run -c Release`.
 - `tools/FrameProbe`: separate measurement plugin for the on/off comparison. Not shipped.
 - `tools/SaveDump`: validates a save and extracts its sections.
-- `src/SPSave.Server`: the server mod (net10.0): the profile lock while a save waits.
+- `src/SPSave.Server`: the server mod (net10.0): the profile lock while a save waits (`PitFireTeamLock` for Pit
+  FireTeam's teammate actions).
+- docs: DESIGN.md (player promises), TEST-PLAN.md (in-game checks per step, latest first), PITFIRETEAM-COMPAT.md,
+  MOD-DESCRIPTION.md (draft mod page), C-SERVER-API.md, C3-PLAN.md, B2-COMPAT.md, STEP-A-RESULTS.md.
 
 ## Build
 
