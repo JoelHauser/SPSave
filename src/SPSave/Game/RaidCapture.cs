@@ -80,6 +80,11 @@ namespace SPSave.Game
 
             // Living bots: their profiles (identity, gear, health), where they are, and what they know about the player.
             var awareness = new List<BotAwareness>();
+            var groups = new Dictionary<BotsGroup, int>();
+            var itemOwners = new List<KeyValuePair<string, IEnumerable<string>>>
+            {
+                new KeyValuePair<string, IEnumerable<string>>("player", state.Player.Items.Select(i => i.Id).ToList())
+            };
             foreach (var bot in world.AllAlivePlayersList)
             {
                 if (bot == null || bot.IsYourPlayer)
@@ -90,10 +95,12 @@ namespace SPSave.Game
                 {
                     var descriptor = Describe(bot);
                     var bytes = ProfileCodec.Write(descriptor);
-                    var botState = ReadBot(bot, player, out var known);
+                    var botState = ReadBot(bot, player, groups, out var known);
                     result.Sections.Add(Section(BotSectionPrefix + bot.ProfileId + ProfileCodec.JsonSuffix, bytes));
                     state.Bots.Add(botState);
                     awareness.Add(known);
+                    itemOwners.Add(new KeyValuePair<string, IEnumerable<string>>($"bot {bot.Profile?.Nickname} {bot.ProfileId}",
+                        ItemsOf(bot.Profile).Select(i => i.Id).ToList()));
                 }
                 catch (Exception e)
                 {
@@ -102,16 +109,45 @@ namespace SPSave.Game
                 }
             }
             report.BotsAlive = state.Bots.Count;
+            // Pit FireTeam: which of those bots are the player's followers (refuses the save if it can't tell).
+            var pitWatch = Stopwatch.StartNew();
+            state.PitFollowers = PitFireTeamCompat.Capture(player);
+            var pit = PitFireTeamCompat.Describe(state.PitFollowers);
+            if (pit != null)
+            {
+                Plugin.Log.LogInfo(pit + (state.PitFollowers.Count > 0 ? ": " + string.Join(", ", state.PitFollowers.Select(f => $"{f.Nickname} ({f.Kind})")) : "") +
+                                   $" ({pitWatch.Elapsed.TotalMilliseconds:F0} ms).");
+            }
             var verdict = CombatRule.Evaluate(awareness, combatWindowSeconds);
             state.Combat = new CombatState { WindowSeconds = combatWindowSeconds, InCombat = verdict.InCombat, Detail = verdict.Describe() };
             report.InCombat = verdict.InCombat;
             report.CombatDetail = verdict.Describe();
+            // Spawn waves to come. Without them a resume holds fresh spawns instead of failing.
+            try
+            {
+                state.Waves = Waves.Capture();
+            }
+            catch (Exception e)
+            {
+                state.Waves = null;
+                Plugin.Log.LogWarning("Spawn waves not captured; a resume will hold fresh spawns: " + e);
+            }
             report.BotsMs = Lap(watch);
 
             // World loot: loose items, containers with their current contents, corpses with their pose.
             var loot = CollectLoot(world, report, result);
             result.Sections.Add(WorldLoot.Write(loot));
             report.WorldItemIds = result.WorldItemIds.Count;
+
+            // Every item has one place: on the player, on one bot, or in the world (corpses included).
+            itemOwners.Add(new KeyValuePair<string, IEnumerable<string>>("world", result.WorldItemIds));
+            var duplicates = DuplicateCheck.Find(itemOwners);
+            report.DuplicateItems = duplicates.Count;
+            foreach (var pair in duplicates.Take(10))
+            {
+                var what = result.WorldItems.TryGetValue(pair.Key, out var where) ? $"{where.Key.TemplateId} '{where.Key.ShortName}'" : "";
+                Plugin.Log.LogWarning($"Duplicate item {pair.Key} {what} in: {string.Join(", ", pair.Value)}.");
+            }
             report.LootMs = Lap(watch);
 
             // Doors, raid clock, time of day, weather.
@@ -379,7 +415,7 @@ namespace SPSave.Game
             return state;
         }
 
-        private static BotState ReadBot(Player bot, Player mainPlayer, out BotAwareness awareness)
+        private static BotState ReadBot(Player bot, Player mainPlayer, Dictionary<BotsGroup, int> groups, out BotAwareness awareness)
         {
             var state = new BotState
             {
@@ -400,6 +436,27 @@ namespace SPSave.Game
 
             awareness = default;
             var owner = bot.AIData?.BotOwner;
+            if (owner != null)
+            {
+                var group = owner.BotsGroup;
+                if (group != null)
+                {
+                    if (!groups.TryGetValue(group, out var number))
+                    {
+                        number = groups.Count + 1;
+                        groups.Add(group, number);
+                    }
+                    state.Group = number;
+                    state.GroupTarget = group.TargetMembersCount;
+                }
+                if (owner.Boss != null && owner.Boss.IamBoss)
+                {
+                    state.Boss = true;
+                    state.FollowersTarget = owner.Boss.TargetFollowersCount;
+                }
+                state.Zone = owner.SpawnBotZone != null ? owner.SpawnBotZone.NameZone : null;
+                state.Personality = SainCompat.ReadPersonality(owner);
+            }
             var enemies = owner != null ? owner.EnemiesController?.EnemyInfos : null;
             if (enemies != null && enemies.TryGetValue(mainPlayer, out var info) && info != null)
             {

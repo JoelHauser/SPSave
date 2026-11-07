@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using Comfort.Common;
 using EFT;
 using EFT.Bots;
@@ -48,7 +49,7 @@ namespace SPSave.Game
         {
             if (ResumeSession.Loading && ReferenceEquals(__instance, ResumeSession.Profile))
             {
-                __result = __result.Concat(ResumeSession.CorpseBundles());
+                __result = __result.Concat(ResumeSession.CorpseBundles()).Concat(ResumeSession.BotBundles());
             }
         }
     }
@@ -86,6 +87,7 @@ namespace SPSave.Game
                     return;
                 }
                 var retired = Core.SnapshotFile.Retire(path, DateTime.UtcNow);
+                LockClient.Unlock();
                 Plugin.Log.LogInfo($"Raid ended normally ({exitStatus}), so its save can't be resumed; moved to {retired}.");
             }
             catch (Exception e)
@@ -112,24 +114,97 @@ namespace SPSave.Game
             startTime = DateTimeExtensions.UtcNow - TimeSpan.FromSeconds(past);
             sessionTime = TimeSpan.FromSeconds(clock.SessionSeconds);
         }
+
+        /// <summary>The raid clock now reads the time played: restored wave timers count from this moment.</summary>
+        [PatchPostfix]
+        private static void Postfix(GameTimer __instance)
+        {
+            if (!ResumeSession.Loading || !ResumeSession.WavesRestored || Waves.Aligned
+                || Singleton<AbstractGame>.Instance?.GameTimer != __instance)
+            {
+                return;
+            }
+            Waves.Aligned = true;
+            try
+            {
+                Waves.AlignToRaidClock();
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogError("Aligning wave timers to the raid clock failed; waves may come a few seconds early. " + e);
+            }
+        }
     }
 
     /// <summary>
-    /// B1 restores no bots, so none may spawn: with NoBots, BotsController.Init sets _canSpawn false and every wave and
-    /// boss activation is ignored.
+    /// Fresh spawns in a resumed raid. With the saved waves restored (Waves) they go ahead, and each boss or PMC wave
+    /// is logged with the raid time, to check the schedule. Without them (a save from before 0.4.0, or a failed
+    /// restore) they are held: the server's waves would start again from zero.
+    /// Every fresh spawn passes one of three BotsController methods: old waves and ABPS's scav trickle
+    /// (ActivateBotsByWave(SpawnWave)), boss, PMC and quest waves (ActivateBotsByWave(BossLocationSpawn), the
+    /// BossSpawnScenario action in LocalGame.Create), and ActivateBotsWithoutWave. Restored bots don't.
+    ///
+    /// Not B1's BotAmount = NoBots: that also leaves BotsController._canSpawn false, so it never subscribes to OnKill,
+    /// OnBeingHit and the grenade events, and restored bots wouldn't react to being shot.
     /// </summary>
-    internal sealed class BotSettingsPatch : ModulePatch
+    internal static class FreshSpawnGate
     {
-        protected override MethodBase GetTargetMethod() => AccessTools.Method(typeof(LocalGame), "vmethod_1");
+        private static int _held;
+
+        internal static bool Allow(string what, bool log = false)
+        {
+            if (!ResumeSession.HoldFreshSpawns)
+            {
+                if (log && ResumeSession.Phase != ResumePhase.None)
+                {
+                    var timer = Singleton<AbstractGame>.Instance?.GameTimer;
+                    Plugin.Log.LogInfo($"Resumed raid: {what} spawning at raid time {timer?.PastTime.TotalSeconds:F0} s.");
+                }
+                return true;
+            }
+            if (_held++ == 0)
+            {
+                Plugin.Log.LogInfo($"Holding fresh bot spawns in this resumed raid (first: {what}).");
+            }
+            return false;
+        }
+
+        internal static void Reset() => _held = 0;
+    }
+
+    internal sealed class WaveSpawnGatePatch : ModulePatch
+    {
+        protected override MethodBase GetTargetMethod() =>
+            AccessTools.Method(typeof(BotsController), nameof(BotsController.ActivateBotsByWave), new[] { typeof(SpawnWave) });
 
         [PatchPrefix]
-        private static void Prefix(ref BotControllerSettings controllerSettings)
+        private static bool Prefix(SpawnWave wave, ref Task __result)
         {
-            if (ResumeSession.Loading)
+            if (FreshSpawnGate.Allow($"wave {wave?.WildSpawnType} x{wave?.BotsCount}"))
             {
-                controllerSettings.BotAmount = EBotAmount.NoBots;
+                return true;
             }
+            __result = Task.CompletedTask;
+            return false;
         }
+    }
+
+    internal sealed class BossSpawnGatePatch : ModulePatch
+    {
+        protected override MethodBase GetTargetMethod() =>
+            AccessTools.Method(typeof(BotsController), nameof(BotsController.ActivateBotsByWave), new[] { typeof(BossLocationSpawn) });
+
+        [PatchPrefix]
+        private static bool Prefix(BossLocationSpawn wave) => FreshSpawnGate.Allow($"boss wave {wave?.BossType}", log: true);
+    }
+
+    internal sealed class FreeSpawnGatePatch : ModulePatch
+    {
+        protected override MethodBase GetTargetMethod() =>
+            AccessTools.Method(typeof(BotsController), nameof(BotsController.ActivateBotsWithoutWave));
+
+        [PatchPrefix]
+        private static bool Prefix(int count) => FreshSpawnGate.Allow($"{count} bots without a wave");
     }
 
     /// <summary>The saved world replaces the server's freshly generated loot before it is spawned.</summary>
@@ -162,7 +237,10 @@ namespace SPSave.Game
         }
     }
 
-    /// <summary>BaseLocalGame.vmethod_3 clears found-in-raid on the player's items at spawn; not on a resumed profile.</summary>
+    /// <summary>
+    /// BaseLocalGame.vmethod_3 clears found-in-raid on the player's items at spawn; not on a resumed profile.
+    /// LocalGame.CreateBotByProfile sets every item on a bot to (side == Savage); a restored bot keeps its saved flags.
+    /// </summary>
     internal sealed class SpawnedInSessionPatch : ModulePatch
     {
         protected override MethodBase GetTargetMethod() => AccessTools.Method(typeof(Profile), nameof(Profile.SetSpawnedInSession));
@@ -170,6 +248,10 @@ namespace SPSave.Game
         [PatchPrefix]
         private static bool Prefix(Profile __instance, bool value)
         {
+            if (ResumeSession.IsRestoredBot(__instance))
+            {
+                return false;
+            }
             return value || !ResumeSession.Active || !ReferenceEquals(__instance, ResumeSession.Profile);
         }
     }
@@ -234,7 +316,37 @@ namespace SPSave.Game
             {
                 Plugin.Log.LogError("Restoring the raid failed partway: " + e);
             }
-            ReadyController.Attach(__instance.GameWorld);
+            if (ResumeSession.Outcome != null)
+            {
+                ResolveBlackout.Begin();
+                ResolveController.Attach(__instance.GameWorld);
+            }
+            else
+            {
+                ReadyController.Attach(__instance.GameWorld);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Pit FireTeam fills its spawn lists from the pre-raid group in its own postfix on SendRaidSettings, which
+    /// TarkovApplication.LocalGameCreate calls for every local raid that isn't a transit. On a resume this runs after
+    /// it (Priority.Last) and puts the saved squad there instead (PitFireTeamCompat.PrepareResume), before the player
+    /// is activated (Pit FireTeam prefetches its squad's profiles then).
+    /// </summary>
+    internal sealed class PitSquadPatch : ModulePatch
+    {
+        protected override MethodBase GetTargetMethod() => AccessTools.Method(typeof(EftClientBackendSession), nameof(EftClientBackendSession.SendRaidSettings));
+
+        [PatchPostfix]
+        [HarmonyPriority(Priority.Last)]
+        private static void Postfix()
+        {
+            if (ResumeSession.Phase != ResumePhase.Loading || ResumeSession.State == null || !PitFireTeamCompat.Loaded)
+            {
+                return;
+            }
+            PitFireTeamCompat.PrepareResume(ResumeSession.State, ending: ResumeSession.Outcome != null);
         }
     }
 }

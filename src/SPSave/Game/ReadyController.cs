@@ -3,7 +3,6 @@ using System.Collections;
 using System.Reflection;
 using Comfort.Common;
 using EFT;
-using EFT.Communications;
 using EFT.UI;
 using EFT.UI.BattleTimer;
 using HarmonyLib;
@@ -13,10 +12,12 @@ using UnityEngine;
 namespace SPSave.Game
 {
     /// <summary>
-    /// Holds a restored raid frozen (see Freeze) until the player presses the Ready key, then gives them control
-    /// with the clock exactly where it was saved. Exists only while waiting; it is destroyed on Ready, so it costs
-    /// nothing during play. Timer handling follows the Pause mod (netVnum.Pause): shift the raid timer and the timer
-    /// panel by the time spent frozen.
+    /// Finishes a resume once PreloaderUI's black overlay has faded: uses up the save, unlocks the profile and puts the
+    /// raid clock and timer panels right. Joel (2026-11-06): no Ready window, no key, straight back into the raid.
+    /// Nothing is held during the fade, as in a normal raid start: 0.8.5 still froze the player (Freeze, removed in
+    /// 0.8.6), which left the arms stuck in a pose and took control away for a moment after (Joel: not polished).
+    /// Exists only for the fade; destroyed after, so it costs nothing during play. Timer handling follows the Pause
+    /// mod (netVnum.Pause): the raid timer and panels are shifted by the time the fade took, as when it was frozen.
     /// </summary>
     internal sealed class ReadyController : MonoBehaviour
     {
@@ -26,11 +27,10 @@ namespace SPSave.Game
         private static readonly AccessTools.FieldRef<TimerPanel, DateTime> TimerPanelEnd =
             AccessTools.FieldRefAccess<TimerPanel, DateTime>("_dateTime");
 
-        /// <summary>PreloaderUI's black overlay; its fade-in steps by Time.deltaTime, so game time stops only after it.</summary>
+        /// <summary>PreloaderUI's black overlay; the resume is finished once it is gone.</summary>
         private static readonly FieldInfo BlackOverlay = AccessTools.Field(typeof(PreloaderUI), "_overlapBlackImage");
 
-        private DateTime _frozenAt;
-        private GUIStyle _style;
+        private DateTime _startedAt;
 
         internal static void Attach(GameWorld world)
         {
@@ -42,24 +42,24 @@ namespace SPSave.Game
 
         private void Start()
         {
-            _frozenAt = DateTimeExtensions.UtcNow;
-            ResumeSession.Phase = ResumePhase.WaitingForReady;
-            Freeze.Begin(Singleton<GameWorld>.Instance?.MainPlayer);
-            StartCoroutine(StopTimeAfterFadeIn());
-            NotificationManager.DisplayMessageNotification($"SPSave: raid restored. Press {Plugin.ReadyKey.Value} to take control.",
-                ENotificationDurationType.Long);
+            _startedAt = DateTimeExtensions.UtcNow;
+            ResumeSession.Phase = ResumePhase.Finishing;
+            PitFireTeamCompat.PlaceSquad(ResumeSession.State);
+            StartCoroutine(ReadyAfterFadeIn());
         }
 
-        private IEnumerator StopTimeAfterFadeIn()
+        private IEnumerator ReadyAfterFadeIn()
         {
             var giveUpAt = Time.realtimeSinceStartup + 8f;
             while (BlackScreenShowing() && Time.realtimeSinceStartup < giveUpAt)
             {
                 yield return null;
             }
-            if (ResumeSession.Phase == ResumePhase.WaitingForReady)
+            // A frame later, not inside whatever ended the fade.
+            yield return null;
+            if (ResumeSession.Phase == ResumePhase.Finishing)
             {
-                Time.timeScale = 0f;
+                Ready();
             }
         }
 
@@ -70,31 +70,10 @@ namespace SPSave.Game
             return overlay != null && overlay.gameObject.activeInHierarchy;
         }
 
-        private void Update()
-        {
-            if (Plugin.ReadyKey.Value.IsDown())
-            {
-                Ready();
-            }
-        }
-
-        private void OnGUI()
-        {
-            if (_style == null)
-            {
-                _style = new GUIStyle(GUI.skin.label) { fontSize = 28, alignment = TextAnchor.MiddleCenter, wordWrap = true };
-                _style.normal.textColor = Color.white;
-            }
-            var width = Screen.width * 0.6f;
-            GUI.Label(new Rect((Screen.width - width) / 2f, Screen.height * 0.38f, width, 120f),
-                $"Raid restored. Everything is paused.\nPress {Plugin.ReadyKey.Value} to take control.", _style);
-        }
-
         private void Ready()
         {
-            var frozen = DateTimeExtensions.UtcNow - _frozenAt;
-            Time.timeScale = 1f;
-            Step("unfreeze", Freeze.End);
+            // Time from the game start to the end of the fade; the clock is shifted by it, so the time left is what was saved.
+            var faded = DateTimeExtensions.UtcNow - _startedAt;
             var game = Singleton<AbstractGame>.Instance as BaseLocalGame<EftGamePlayerOwner>;
             var timer = game?.GameTimer;
             var clock = ResumeSession.State?.Clock;
@@ -106,6 +85,10 @@ namespace SPSave.Game
                 var retired = SnapshotFile.Retire(ResumeSession.SavePath, DateTime.UtcNow);
                 Plugin.Log.LogInfo($"Save used up and moved to {retired}.");
             });
+            Step("unlocking the profile", () =>
+            {
+                Plugin.Log.LogInfo(LockClient.Unlock() ? "Profile unlocked on the server." : "The server didn't confirm the unlock; it unlocks at raid end.");
+            });
             Step("found-in-raid check", () =>
             {
                 RaidCapture.CheckInventory("Taking control", ResumeSession.State?.Player?.Items, ResumeSession.Profile);
@@ -114,17 +97,17 @@ namespace SPSave.Game
             {
                 if (timer?._startDateTime != null && timer._escapeDateTime != null)
                 {
-                    timer._startDateTime = timer._startDateTime.Value + frozen;
-                    timer._escapeDateTime = timer._escapeDateTime.Value + frozen;
+                    timer._startDateTime = timer._startDateTime.Value + faded;
+                    timer._escapeDateTime = timer._escapeDateTime.Value + faded;
                 }
             });
             Step("timer panels", () =>
             {
                 // The panels were set when the game started (ExtractionTimersPanel.SetTime) from the full raid
                 // length, not the time left: the main timer gets the raid's real end; each extract timer, set to
-                // now + its own time, loses the time already played and gains the time spent frozen. Panels that
+                // now + its own time, loses the time already played and gains the fade time. Panels that
                 // were never shown have no end time (DateTime.MinValue) and are left alone.
-                var shift = frozen - TimeSpan.FromSeconds(clock?.PastSeconds ?? 0d);
+                var shift = faded - TimeSpan.FromSeconds(clock?.PastSeconds ?? 0d);
                 foreach (var panel in FindObjectsOfType<TimerPanel>(true))
                 {
                     var end = TimerPanelEnd(panel);
@@ -159,9 +142,8 @@ namespace SPSave.Game
             });
 
             var left = timer?._escapeDateTime != null ? (timer._escapeDateTime.Value - DateTimeExtensions.UtcNow).TotalSeconds : 0d;
-            Plugin.Log.LogInfo($"Player took control after {frozen.TotalSeconds:F0} s frozen; {left:F0} s left of {timer?.SessionSeconds()}.");
-            ResumeSession.Reset();
-            ResumeSession.Phase = ResumePhase.Live;
+            Plugin.Log.LogInfo($"Resume finished {faded.TotalSeconds:F1} s after the raid started (loading fade); {left:F0} s left of {timer?.SessionSeconds()}.");
+            ResumeSession.GoLive();
             Destroy(this);
         }
 
@@ -179,12 +161,9 @@ namespace SPSave.Game
 
         private void OnDestroy()
         {
-            if (ResumeSession.Phase == ResumePhase.WaitingForReady)
+            if (ResumeSession.Phase == ResumePhase.Finishing)
             {
-                // The raid closed while still frozen (Leave from the menu): don't leave the game paused. The save
-                // was not used up, so it can be resumed again.
-                Time.timeScale = 1f;
-                Freeze.End();
+                // The raid closed during the fade: the save was not used up, so it can be resumed again.
                 ResumeSession.Reset();
             }
         }

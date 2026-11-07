@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -220,7 +221,13 @@ namespace SPSave.Core
         public static string Retire(string path, DateTime utcNow)
         {
             var directory = Path.GetDirectoryName(Path.GetFullPath(path)) ?? "";
-            var target = Path.Combine(directory, "used", utcNow.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture));
+            var stamp = Path.Combine(directory, "used", utcNow.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture));
+            // Two retires in one second (a save discarded right after it was written) get their own folders.
+            var target = stamp;
+            for (var n = 2; Directory.Exists(target); n++)
+            {
+                target = stamp + "-" + n;
+            }
             var moved = false;
             foreach (var candidate in new[] { path, path + TempSuffix, path + PrevSuffix })
             {
@@ -232,8 +239,53 @@ namespace SPSave.Core
                 File.Move(candidate, Path.Combine(target, Path.GetFileName(candidate)));
                 moved = true;
             }
+            if (moved)
+            {
+                PruneUsed(directory, UsedSavesKept);
+            }
             return moved ? target : null;
         }
+
+        /// <summary>Retired saves kept in used\ for troubleshooting; older ones are deleted (Joel: don't fill drives).</summary>
+        public const int UsedSavesKept = 3;
+
+        /// <summary>
+        /// Deletes all but the newest <paramref name="keep"/> stamped folders (yyyyMMdd-HHmmss, with -2, -3 for a
+        /// second retire in the same second, so name order is time order) in used\ beside the save. Anything else in used\ is left alone. Never throws: a folder that can't
+        /// be deleted now goes next time. Returns how many were deleted.
+        /// </summary>
+        public static int PruneUsed(string saveDirectory, int keep)
+        {
+            var used = Path.Combine(saveDirectory, "used");
+            if (!Directory.Exists(used))
+            {
+                return 0;
+            }
+            var deleted = 0;
+            try
+            {
+                var stamped = Directory.GetDirectories(used)
+                    .Where(d => StampPattern.IsMatch(Path.GetFileName(d)))
+                    .OrderByDescending(d => Path.GetFileName(d), StringComparer.Ordinal)
+                    .Skip(keep);
+                foreach (var old in stamped)
+                {
+                    try
+                    {
+                        Directory.Delete(old, recursive: true);
+                        deleted++;
+                    }
+                    catch (IOException) { }
+                    catch (UnauthorizedAccessException) { }
+                }
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            return deleted;
+        }
+
+        private static readonly System.Text.RegularExpressions.Regex StampPattern =
+            new System.Text.RegularExpressions.Regex(@"^\d{8}-\d{6}(-\d+)?$");
 
         private static byte[] ReadExactly(BinaryReader reader, int length)
         {

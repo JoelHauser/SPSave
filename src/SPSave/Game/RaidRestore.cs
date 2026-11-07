@@ -36,6 +36,19 @@ namespace SPSave.Game
             Run("search", notes, () => notes.Add(RestoreSearch(player, state.Player)));
             Run("weather", notes, () => notes.Add(RestoreWeather()));
             Run("time of day", notes, () => notes.Add(RestoreTimeOfDay(world, state.Clock)));
+            // A save being ended (Killed/MIA) ends a frame after the start: its bots would never be seen, and SAIN,
+            // which takes restored bots on only after Ready, throws in BotComponent.OnDisable for each one when the
+            // raid unloads (0.7.2 Abandon test: 9 bots, 18 errors).
+            if (ResumeSession.Outcome == null)
+            {
+                Run("bots", notes, () => notes.Add(BotRestore.Spawn(game as IBotGame, state)));
+            }
+            else
+            {
+                notes.Add($"bots not brought back: the raid ends as {ResumeSession.Outcome}");
+            }
+            // ABPS reset its count in its BotsController.Init postfix, which ran before the game started.
+            Run("ABPS", notes, () => notes.Add(AbpsCompat.WriteSpawnedPerPlayer(state.Waves?.AbpsBotsSpawnedPerPlayer)));
 
             Plugin.Log.LogInfo("Raid restored: " + string.Join("; ", notes.Where(n => !string.IsNullOrEmpty(n))));
         }
@@ -74,7 +87,7 @@ namespace SPSave.Game
         /// Bleeds, fractures and intoxication are IRestorable and come back with the profile's health. These are the
         /// ones the profile drops; anything else that was active (stun, flash, pain from a fracture) is left to the game.
         /// </summary>
-        private static string RestoreEffects(ActiveHealthController health, List<EffectState> saved)
+        internal static string RestoreEffects(ActiveHealthController health, List<EffectState> saved)
         {
             if (health == null || saved == null)
             {

@@ -3,10 +3,8 @@
 An SPT mod that lets you save a raid, close the game, and pick up the same raid later: your gear, the world and the
 bots come back where you left them.
 
-> **Status: in development, not released.** It is being tested in game, so far on Factory only. Don't use it on a
-> profile you care about yet. There is no download; a release will come after testing on more maps.
-
-Built for **SPT 4.1.6** (EFT 0.16.9.40743), solo PMC raids.
+**Version 1.0.0** for **SPT 4.1.6** (EFT 0.16.9.40743), solo PMC raids. Download it from
+[Releases](https://github.com/JoelHauser/SPSave/releases).
 
 ## How it works
 
@@ -36,19 +34,27 @@ quests and stats once, across every session of the raid.
 
 ## Compatibility
 
-Tested with SAIN (bots keep their personality), ABPS and ORBIT. If your mods change between saving and resuming,
-you're told which ones before the raid loads. A save from another game version can only be abandoned.
+Works with SAIN (bots keep their personality), ABPS, ORBIT, Pit FireTeam (squadmates come back at their spots) and
+Menu Overhaul. If your mods change between saving and resuming, you're told which ones before the raid loads. A save
+from another game version can only be abandoned.
 
-## Install (once released)
+> **Don't remove or update mods while a save is waiting.** If the save holds items from a mod that's gone, the raid
+> can't be rebuilt and is lost (your profile goes back to how it was before the raid). Finish or abandon it first.
 
-Two parts, both required: the client plugin `BepInEx/plugins/SPSave.dll` and the server mod
-`user/mods/SPSave/SPSave.Server.dll` in your SPT server folder. Restart the server after installing. Saves are kept in
-`SPSave\saves\` in your SPT folder; only the three most recent used-up saves are kept.
+## Install
+
+Extract the release zip into your SPT folder. Both parts are required: the client plugin
+`BepInEx/plugins/SPSave.dll` and the server mod `SPT_Runtime/user/mods/SPSave/SPSave.Server.dll`. Restart the server
+after installing. Saves are kept in `SPSave\saves\` in your SPT folder; only the three most recent used-up saves are
+kept.
+
+Before uninstalling, resume or abandon any saved raid: otherwise your profile stays locked on the server. If that
+happens, delete your profile's file in `SPT_Runtime/user/mods/SPSave/locks` with the server stopped.
 
 ## For developers
 
-Design: [docs/DESIGN.md](docs/DESIGN.md). Test plans: [docs/TEST-PLAN.md](docs/TEST-PLAN.md). Current work is on the
-`c-server` branch.
+Design: [docs/DESIGN.md](docs/DESIGN.md). Test plans: [docs/TEST-PLAN.md](docs/TEST-PLAN.md). Licensed under
+[MIT](LICENSE).
 
 ```
 dotnet build src\SPSave -c Release -p:SPTPath="<SPT root>"

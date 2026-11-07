@@ -19,6 +19,8 @@ namespace SPSave.Game
         public string ServerId;
         public string TimeVariant;
         public List<string> Plugins = new List<string>();
+        /// <summary>Null: resume. "Killed": saved in combat, so the next load ends the raid as a death (Core.Resolve).</summary>
+        public string ResolveAs;
     }
 
     public sealed class RaidState
@@ -28,6 +30,99 @@ namespace SPSave.Game
         public List<DoorState> Doors = new List<DoorState>();
         public ClockState Clock;
         public CombatState Combat;
+        /// <summary>Null in saves before 0.4.0: those resume with fresh spawns held.</summary>
+        public WavesState Waves;
+        /// <summary>The player's living Pit FireTeam followers (PitFireTeamCompat); null when Pit FireTeam isn't loaded.</summary>
+        public List<PitFollowerState> PitFollowers;
+    }
+
+    /// <summary>
+    /// One Pit FireTeam follower of the player at save time (docs/PITFIRETEAM-COMPAT.md). The bot itself (profile,
+    /// position) is in the save like any other; this says how Pit FireTeam knew it.
+    /// </summary>
+    public sealed class PitFollowerState
+    {
+        public const string Squadmate = "squadmate";
+        public const string BossAlly = "bossAlly";
+        public const string Recruit = "recruit";
+
+        public string ProfileId;
+        public string AccountId;
+        public string Nickname;
+        /// <summary>Squadmate (saved roster member), BossAlly (Knight/Big Pipe/Birdeye companion) or Recruit (raid pickup).</summary>
+        public string Kind;
+        public string Role;
+        /// <summary>Pit FireTeam's protected equipment ids for this follower (InteractableObjects.GetStoredEquipment).</summary>
+        public List<string> ProtectedEquipmentIds = new List<string>();
+        /// <summary>Items it carries for return after the raid (InteractableObjects.GetStoredItems).</summary>
+        public List<string> TrackedReturnItemIds = new List<string>();
+    }
+
+    /// <summary>
+    /// The raid's spawn waves as they stood (see Core.WaveTrim): BossLocationSpawn as the scenario holds them (after
+    /// LocalGame.Create's adjustments), copied field by field. Not the game's JSON (0.4.0 used it): its
+    /// Vector3NullableSerializer can't read back the null PerfectPos it writes.
+    /// </summary>
+    public sealed class WavesState
+    {
+        /// <summary>Time.time between BossSpawnScenario.Run and the save; -1 if it never ran.</summary>
+        public float BossElapsed = -1f;
+        public List<BossWaveState> Boss = new List<BossWaveState>();
+        /// <summary>Time.time between WavesSpawnScenario.Run(AfterGameStarted) and the save; -1 if old waves are off.</summary>
+        public float OldElapsed = -1f;
+        public List<OldWaveState> Old = new List<OldWaveState>();
+        /// <summary>ABPS's per-player cap on the scav trickle (Utility.BotsSpawnedPerPlayer); null without ABPS.</summary>
+        public double? AbpsBotsSpawnedPerPlayer;
+    }
+
+    public sealed class BossWaveState
+    {
+        // BossLocationSpawn's serialized fields.
+        public string BossName;
+        public float BossChance;
+        public string BossZone;
+        public bool BossPlayer;
+        public string BossDifficult;
+        public string BossEscortDifficult;
+        public string BossEscortType;
+        public string BossEscortAmount;
+        public float Time;
+        public float Delay;
+        public string TriggerId;
+        public string TriggerName;
+        public bool IgnoreMaxBots;
+        public bool ForceSpawn;
+        public bool DependKarma;
+        public float[] PerfectPos;
+        public List<SupportState> Supports;
+        public bool ShowOnTarkovMap;
+        public bool ShowOnTarkovMapPvE;
+        // Rolled by BossLocationSpawn.Init; put back after the resume's Init rolls them again.
+        public bool ShallSpawn;
+        public bool Activated;
+        public string BornZone;
+        public int EscortCount;
+    }
+
+    public sealed class SupportState
+    {
+        public EFT.WildSpawnType BossEscortType;
+        public int BossEscortAmount;
+        public string[] BossEscortDifficult;
+    }
+
+    /// <summary>One EFT.SpawnWave (old-style scav wave), as WavesSpawnScenario.Init rolled it.</summary>
+    public sealed class OldWaveState
+    {
+        public float Time;
+        public int BotsCount;
+        public global::BotDifficulty Difficulty;
+        public EFT.WildSpawnType WildSpawnType;
+        public string SpawnAreaName;
+        public EFT.EPlayerSide Side;
+        public bool IsPlayers;
+        public float ChanceGroup;
+        public bool KeepZoneOnSpawn;
     }
 
     public sealed class PlayerState
@@ -64,6 +159,17 @@ namespace SPSave.Game
         public float PoseLevel;
         public bool Prone;
         public string HandsItemId;
+        /// <summary>Bots with the same number shared a BotsGroup (numbered per save, from 1; 0 = none).</summary>
+        public int Group;
+        /// <summary>The group's BotsGroup.TargetMembersCount (ORBIT sizes its squads from it).</summary>
+        public int GroupTarget;
+        /// <summary>BotBoss.IamBoss, and how many followers it wanted (BotBoss.TargetFollowersCount).</summary>
+        public bool Boss;
+        public int FollowersTarget;
+        /// <summary>BotOwner.SpawnBotZone.NameZone.</summary>
+        public string Zone;
+        /// <summary>SAIN's personality name (SAINExternal.GetPersonality); null without SAIN.</summary>
+        public string Personality;
         public bool KnowsPlayer;
         public bool SeesPlayer;
         public float? SecondsSinceSeenPlayer;
