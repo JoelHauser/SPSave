@@ -387,9 +387,64 @@ namespace SPSave.Game
         /// </summary>
         internal static void ForgetMenuPositions(EFT.UI.MenuScreen screen)
         {
+            // Only after EFT's reconnect-mode menu has shown in this session (the case the clear is for); a session
+            // with no save leaves Pit FireTeam's record alone (0.9.8).
+            if (!ReconnectMenuSeen || screen == null || !Loaded || !Chainloader.PluginInfos.ContainsKey(MenuOverhaulGuid))
+            {
+                return;
+            }
+            var record = MenuRecord(screen);
+            if (record == null || record.Count == 0)
+            {
+                return;
+            }
+            record.Clear();
+            if (!_menuLogged)
+            {
+                _menuLogged = true;
+                Plugin.Log.LogInfo("Pit FireTeam's menu button record cleared before the main menu shows (Menu Overhaul lays it out again).");
+            }
+        }
+
+        /// <summary>Set when the main menu opens in reconnect mode (MainMenuPatch); stays set for the session.</summary>
+        internal static bool ReconnectMenuSeen;
+
+        private const string SquadButtonName = "pitFireTeam_SquadControlButton";
+        private static bool _brushLogged;
+
+        /// <summary>
+        /// Pit FireTeam makes MY SQUAD once, as a copy of CHARACTER, on the first menu it sees. Menu Overhaul hides the
+        /// brush ("Background") on its five named buttons only, and its return-to-normal fades the brush in, not out.
+        /// When the first menu is EFT's reconnect-mode menu (a save waiting), which Menu Overhaul doesn't restyle, the
+        /// copy keeps CHARACTER's stock brush, and after the first hover MY SQUAD looks highlighted for good (Joel,
+        /// 2026-11-07; 0.9.9's diagnostic: enter/exit and state changes were normal). Without a save waiting, the copy
+        /// is made from the restyled CHARACTER, so this changes nothing there.
+        /// </summary>
+        internal static void MatchSquadButtonBrush(EFT.UI.MenuScreen screen)
+        {
             if (screen == null || !Loaded || !Chainloader.PluginInfos.ContainsKey(MenuOverhaulGuid))
             {
                 return;
+            }
+            var squadBrush = screen.transform.Find(SquadButtonName + "/Background");
+            var characterBrush = screen.transform.Find("CharacterButton/Background");
+            if (squadBrush == null || characterBrush == null || squadBrush.gameObject.activeSelf == characterBrush.gameObject.activeSelf)
+            {
+                return;
+            }
+            squadBrush.gameObject.SetActive(characterBrush.gameObject.activeSelf);
+            if (!_brushLogged)
+            {
+                _brushLogged = true;
+                Plugin.Log.LogInfo($"MY SQUAD's button brush set {(characterBrush.gameObject.activeSelf ? "on" : "off")} like CHARACTER's (Menu Overhaul).");
+            }
+        }
+
+        private static IDictionary MenuRecord(EFT.UI.MenuScreen screen)
+        {
+            if (screen == null)
+            {
+                return null;
             }
             if (!_menuLooked)
             {
@@ -405,19 +460,10 @@ namespace SPSave.Game
             }
             if (_menuPositions == null)
             {
-                return;
+                return null;
             }
             var ui = screen.GetComponent(_menuUiType);
-            if (ui == null || !(_menuPositions.GetValue(ui) is IDictionary record) || record.Count == 0)
-            {
-                return;
-            }
-            record.Clear();
-            if (!_menuLogged)
-            {
-                _menuLogged = true;
-                Plugin.Log.LogInfo("Pit FireTeam's menu button record cleared before the main menu shows (Menu Overhaul lays it out again).");
-            }
+            return ui != null ? _menuPositions.GetValue(ui) as IDictionary : null;
         }
 
         /// <summary>Before BotRestore spawns a saved recruit: Pit FireTeam treats it as a follower from activation on.</summary>

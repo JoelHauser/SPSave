@@ -182,15 +182,32 @@ every member checked against the installed DLLs; a missing member refuses saves 
 - Not yet seen in game: recruits rejoining, boss allies, Abandon/Killed with a squadmate. Report the menu-record
   behaviour to pitAlex (it keeps whatever layout it sees first).
 
-Repo: everything through 0.9.7 / server 0.8.0 is committed and pushed on `c-server` (`5a9cac9`, 2026-11-07), which
+Repo: everything through 0.9.11 / server 0.8.0 is committed and pushed on `c-server` (2026-11-07), which
 contains `b2-bots`; `main` has B1 plus the README. Test zips in `dist/` (ignored by git), latest `SPSave-0.9.6-test.zip`.
 
-## Upcoming steps (as of 2026-11-07, in order)
+## Upcoming steps (as of 2026-11-07, in order; client 0.9.11 installed)
 
-1. **Customs run** (short: about 4 minutes near spawn, SAVE & QUIT, RECONNECT, look around, extract or LEAVE): weather
-   restore (Factory has none; a Customs resume ran once with "weather 550 nodes" but wasn't checked), night time
-   variant, Reshala and his guards if near. With Pit FireTeam: one Abandon with a squadmate (log "squadmate(s)
-   reported lost", My Squad shows it) and, if possible, a recruit before saving ("recruit back as your follower").
+1. **Customs: passed in game 2026-11-07** (two runs, each save → RECONNECT → second save → RECONNECT → LEAVE):
+   night time variant and weather (550/552 nodes) came back as left (Joel), an opened door stayed open, the Pit
+   FireTeam squadmate came back at its exact spot, bodies looked normal; second saves of resumed raids round-tripped
+   cleanly (1,599 and 2,030 world items); Abandon ended as MIA, unlocked on both sides, logged "1 squadmate(s) reported
+   lost" and My Squad showed the teammate lost. EFT's errors.log on the MIA ending: 5 NREs in
+   `Corpse.InitBody` → `LoadCustomizationResources` (a corpse customization part with no bundle gives a null
+   `ResourceKey`; the game catches it and the body still builds), plus `PerfectCulling` NREs at unload.
+   Still open: a Pit FireTeam recruit (none recruited yet); Reshala not met.
+   **MY SQUAD stuck hover highlight: fixed in 0.9.10, passed in game 2026-11-07** (Joel: "worked perfectly").
+   Pit FireTeam makes MY SQUAD once, as a copy of CHARACTER, on the first menu of the session; with a save waiting
+   that's the reconnect-mode menu, which Menu Overhaul doesn't restyle, so the copy kept the stock brush
+   (`Background` child). Menu Overhaul hides `Background` on its 5 named buttons only, and its animated idle fades the
+   image to alpha 1, so the brush stayed after a hover. `PitFireTeamCompat.MatchSquadButtonBrush` (postfix,
+   `Priority.Last`, on `MenuScreen.Show`, and a frame later) gives MY SQUAD CHARACTER's brush state. Found with a
+   temporary `[hover]` diagnostic (0.9.9–0.9.10, removed in 0.9.11): enter/exit and state changes were normal. Since
+   0.9.8 Pit's menu record is cleared only once the reconnect-mode menu has shown (`ReconnectMenuSeen`).
+   Crash seen once (0.9.10, not SPSave): native `Mesh.Internal_Create` on a thread-pool thread. Menu Overhaul
+   1.3.0's `PlayerProfileViewService.ApplyMainMenuProfileViewAsync` awaits `AddPlayerModel().ConfigureAwait(false)`,
+   then sets text colours off the main thread; Name Plate's `MenuOverhaulCompat` postfix calls TMP `ForceMeshUpdate`
+   there. Timing-dependent; didn't recur. Unity's log of a crashed session survives as LocalLow `Player-prev.log`.
+   Logs: read them before the next launch, which overwrites BepInEx's and EFT's.
 2. **Other maps** as Joel has time: Interchange (power switch, Killa), Reserve (D2 lever), Labs (keycard check at
    RECONNECT, no second keycard use), a big map load (Streets or Lighthouse).
 3. **Known gaps to decide with Joel:** a removed mod whose items are in the save makes RECONNECT start a fresh raid (no

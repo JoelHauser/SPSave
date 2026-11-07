@@ -39,5 +39,40 @@ namespace SPSave.Game
                 Plugin.Log.LogWarning("Clearing Pit FireTeam's menu record failed: " + e.Message);
             }
         }
+
+        /// <summary>
+        /// After every other mod's postfix (Menu Overhaul restyles the buttons there): MY SQUAD gets CHARACTER's
+        /// brush state, now and a frame later. See PitFireTeamCompat.MatchSquadButtonBrush.
+        /// </summary>
+        [PatchPostfix]
+        [HarmonyPriority(Priority.Last)]
+        private static void Postfix(MenuScreen __instance, MenuScreen.MainMenuBaseScreenController controller)
+        {
+            try
+            {
+                if (controller is MenuScreen.MainMenuScreenController && __instance != null && __instance.isActiveAndEnabled)
+                {
+                    PitFireTeamCompat.MatchSquadButtonBrush(__instance);
+                    __instance.StartCoroutine(MatchNextFrame(__instance));
+                }
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogWarning("Matching MY SQUAD to Menu Overhaul's buttons failed: " + e.Message);
+            }
+        }
+
+        private static IEnumerator MatchNextFrame(MenuScreen screen)
+        {
+            yield return null;
+            try
+            {
+                PitFireTeamCompat.MatchSquadButtonBrush(screen);
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogWarning("Matching MY SQUAD to Menu Overhaul's buttons failed: " + e.Message);
+            }
+        }
     }
 }

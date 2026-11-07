@@ -24,7 +24,7 @@ namespace SPSave
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string Guid = "com.joelhauser.spsave";
-        public const string Version = "0.9.7";
+        public const string Version = "0.9.11";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<float> CombatWindowSeconds;

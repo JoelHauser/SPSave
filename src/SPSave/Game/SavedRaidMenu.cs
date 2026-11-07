@@ -278,6 +278,7 @@ namespace SPSave.Game
                 }
                 var app = __instance;
                 reconnectAction = () => SavedRaidMenu.ShowReconnectScreen(app, manifest);
+                PitFireTeamCompat.ReconnectMenuSeen = true;
                 Plugin.Log.LogInfo($"A saved raid on {manifest.Map} is waiting: main menu in reconnect mode{(manifest.ResolveAs != null ? " (saved in combat: Leave only)" : "")}.");
             }
             catch (Exception e)
