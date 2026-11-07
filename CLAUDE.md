@@ -182,10 +182,10 @@ every member checked against the installed DLLs; a missing member refuses saves 
 - Not yet seen in game: recruits rejoining, boss allies, Abandon/Killed with a squadmate. Report the menu-record
   behaviour to pitAlex (it keeps whatever layout it sees first).
 
-Repo: everything through 0.9.12 / server 0.9.0 is committed and pushed on `c-server` (2026-11-07), which
-contains `b2-bots`; `main` has B1 plus the README. Test zips in `dist/` (ignored by git), latest `SPSave-0.9.6-test.zip`.
+Repo: **1.0.0 released 2026-11-07** (GitHub release v1.0.0, MIT): `c-server` merged into `main`, tagged `v1.0.0`; `c-server`
+and `main` are the same. Release zip: `dist/SPSave-1.0.0.zip` (dist/ is ignored by git).
 
-## Upcoming steps (as of 2026-11-07, in order; client 0.9.12, server 0.9.0 installed)
+## Upcoming steps (as of 2026-11-07, in order; 1.0.0 installed)
 
 1. **Customs: passed in game 2026-11-07** (two runs, each save → RECONNECT → second save → RECONNECT → LEAVE):
    night time variant and weather (550/552 nodes) came back as left (Joel), an opened door stayed open, the Pit
@@ -236,10 +236,10 @@ contains `b2-bots`; `main` has B1 plus the README. Test zips in `dist/` (ignored
    difficulty, Halloween zombies, small per-session stats. BTR, airdrops, artillery, transits, seasonal events don't
    come back (DESIGN.md).
 4. **Merge** `c-server` into main when Joel says; commit and push each later step when he asks.
-5. **Release** only after Joel's checks with his usual mods: version 1.0.0 in both csprojs, `Plugin.Version` and the
-   server `ModMetadata`; a license (none yet); README and mod page (`docs/MOD-DESCRIPTION.md`: add Pit FireTeam to
-   Compatibility, remove the "Testing build" box); release zip per Rules; GitHub release. Never call it release-ready
-   before those checks.
+5. **Release: done 1.0.0 (Joel, 2026-11-07).** For later releases: bump the version in both csprojs, `Plugin.Version` and the
+   server `ModMetadata`; README and mod page (`docs/MOD-DESCRIPTION.md`, rewritten 2026-11-07 as the 1.0.0 page);
+   release zip per Rules (build it with .NET ZipFile: PS 5.1 Compress-Archive writes backslash paths); GitHub
+   release. Never call a release ready before Joel's checks with his usual mods.
 
 ## How the resume hooks in (B1)
 

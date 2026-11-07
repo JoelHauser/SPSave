@@ -11,12 +11,12 @@ namespace SPSave.Server
         public string Name { get; init; } = "SPSave";
         public string Author { get; init; } = "Joel Hauser";
         public List<string> Contributors { get; init; }
-        public Version Version { get; init; } = new Version("0.9.0");
+        public Version Version { get; init; } = new Version("1.0.0");
         public Range SptVersion { get; init; } = new Range("~4.1.0");
         public bool HasPrepatcher { get; init; }
         public List<string> Incompatibilities { get; init; }
         public Dictionary<string, Range> ModDependencies { get; init; }
         public string Url { get; init; } = "https://github.com/JoelHauser/SPSave";
-        public string License { get; init; } = "All rights reserved";
+        public string License { get; init; } = "MIT";
     }
 }
