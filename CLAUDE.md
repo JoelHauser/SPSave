@@ -1,6 +1,6 @@
 # SPSave (Save & Resume Raid): working notes for Claude
 
-SPT client mod (server mod next, step C): save a raid, quit, resume it later. Design and player promises:
+SPT client mod plus a small server mod (the profile lock): save a raid, quit, resume it later. Design and player promises:
 docs/DESIGN.md. Joel's priorities: zero cost during normal play; verified APIs only (no invented class names);
 never call it release-ready before in-game checks.
 
@@ -108,8 +108,82 @@ riskiest first:
    saves still refused until the confirmation dialog exists.
 3. Lock, menu (Resume / Abandon only) and storage. Joel: all UI must look like stock EFT (reuse the game's own
    buttons, text and dialogs; no custom styling). The Ready overlay's `OnGUI` label breaks that rule and needs
-   replacing in D.
+   replacing in D. **Built 2026-11-06 (0.7.0, not yet tested in game; docs/C3-PLAN.md, TEST-PLAN.md C3):**
+   - Server mod `src/SPSave.Server` (net10.0): `LockStore` (one file per profile in `user/mods/SPSave/locks`),
+     routes `/spsave/lock|unlock|status` (`LockRouter`), and `SPSaveLoader` (IOnLoad) enabling its own patches
+     (`AbstractPatch.Enable` only works from the patch's assembly): refuse item events, scav save, prestige, scav
+     regeneration; allow `local/start` only for the lock's map and side; clear the lock at `local/end` and on
+     launcher wipe/remove. Refusals answer `PlayerInRaid` (503002).
+   - Client: Save & Quit locks before closing (no lock confirmed = save discarded); Ready, the resolve and a normal
+     raid end unlock. `MainMenuPatch` (prefix on `TarkovApplication.MainMenu`) matches the save with the server's
+     lock (save without matching lock: discarded; lock without save: dropped) and passes a `reconnectAction`, so the
+     menu is EFT's own reconnect mode and RECONNECT opens the stock `ReconnectionScreen`. RECONNECT resumes, LEAVE
+     asks in `ItemUiContext.ShowMessageWindow` (caption `"CONFIRMATION".Localized()`), a combat save shows only
+     LEAVE. Both start the saved raid by filling the menu's `raidSettings_0` (map, PMC, time variant, Local; waves
+     and bots from `raidSettings_1`, as SPT's LoadOfflineRaidScreenPatch) and calling the menu's Ready handler
+     `MainMenuShowOperation.method_27`. The testing setting from C2 is gone.
+   - **0.7.0 in game 2026-11-06:** lock on Save & Quit, `/spsave/status` and the reconnect-mode menu worked;
+     RECONNECT failed with "Network game matching failed": `method_27` ends with
+     `raidSettings_0.Apply(raidSettings_1)`, which copies `RaidMode` (still Online), side, bots, waves etc. from the
+     offline settings. **0.7.1** sets Local, PMC, map and time on `raidSettings_1` too. Save and lock were intact.
+     0.7.1 got to the resume, then the server's own lock refused `local/start`: the lock held the character's side
+     (`Usec`, from `manifest.Side`), the request the raid side (`Pmc`). The game hung on "starting local game".
+     **0.7.2 / server 0.7.1:** the server takes the raid side from the lock's `serverId` ("map.Pmc stamp"), and the
+     client sends "Pmc". **0.7.2 RECONNECT → resume passed in game 2026-11-06** (Factory, the 0.7.0 save and lock):
+     reconnect-mode menu, stock reconnect screen, raid loaded without the map screens, 18/18 items, 9/9 bots and
+     SAIN personalities back, save used up and profile unlocked on Ready (server logged it).
+     **Abandon from the menu passed (0.7.2):** RECONNECT → LEAVE → Yes ended as MIA, save used up, unlocked, normal
+     menu after. The server log shows that save was a second save of a resumed raid (unlock 23:55:41 on Ready, lock
+     again 23:55:44) and it rebuilt 6/6 items. EFT's errors.log had 18 `SAIN BotComponent.OnDisable` null refs at
+     unload: 9 restored bots SAIN hadn't taken on (it does so after Ready). **0.7.3:** an ending spawns no restored
+     bots, preloads none of their gear and holds fresh spawns.
+     **0.7.3 passed in game 2026-11-07 (Factory):** LEAVE → No returned to the reconnect screen with working buttons
+     (Joel confirmed; the cancel wasn't logged then, it is from 0.8.0), then RECONNECT resumed cleanly: lock at save,
+     6/6 items, 8/8 bots, unlock on Ready on both sides, no errors in SPSave's, EFT's or the server's logs, no SAIN
+     errors. **C3 done** (on Factory only; other maps: see Upcoming steps).
+   - Combat saves at capture: done in D (pause-menu button with a stock confirmation).
+   - Known gap: if the resume fails to load the save after RECONNECT, the raid starts fresh on the saved map; its
+     raid end then unlocks and the next menu discards the save (no duplication: the stash was locked throughout).
 Then D (pause-menu button, Ready to Resume prompt, version and mod-list checks, release).
+**D built 2026-11-06 (0.8.0, not yet tested in game; TEST-PLAN.md D1):**
+- `PauseMenuButtonPatch` (postfix on `MenuScreen.ChangeScreenInGameStatus`): SAVE & QUIT is a clone of the stock
+  `_disconnectButton` (LEAVE) with our label (`DefaultUIButton.SetRawText`), above it, shown only in the in-raid layout
+  and not while frozen or ending. While frozen before Ready, LEAVE is hidden: it would send `local/end` (Left) with
+  the saved profile though the save isn't used up yet.
+- Combat save: from the button, a stock confirmation, then the manifest gets `ResolveAs = "Killed"`. Combat is judged
+  again after the answer. Ctrl+F10 stays as a fallback until the button is confirmed (then it and its per-frame key
+  check go); it still refuses in combat.
+- Ready: the `OnGUI` label is gone; a stock `ItemUiContext.ShowMessageWindow` (caption `"READY".Localized()`) opens
+  0.6 s before time stops; accepting sets a flag that `Update` acts on a frame later. Escape re-asks. Ctrl+F11 stays.
+- Reconnect screen: another game build shows only LEAVE, which discards the save and unlocks (as a hard exit) and
+  reopens `MainMenu()` (untested path). Missing or changed mods (`Core.ModListCheck`; SPSave itself ignored) ask
+  before RECONNECT; added mods are only logged. A No on any reconnect-screen question is logged.
+
+Repo: C3 and D are committed and pushed on branch `c-server` (2026-11-07, on top of `c3ed226`); `b2-bots` is pushed;
+nothing is merged to main after B1. Test zips in `dist/` (ignored by git): latest `SPSave-0.8.0-D-test.zip`.
+
+## Upcoming steps (as of 2026-11-07, in order)
+
+1. **D1 in game** (0.8.0, TEST-PLAN.md D1, Factory): SAVE & QUIT button (looks like LEAVE, saves and closes), the
+   stock Ready window (cursor shows, its button works with time stopped), no LEAVE while frozen, a combat save
+   (confirmation, then Leave-only and Killed), optionally the mod check. Fix what it finds.
+2. **Drop the hotkeys** once the button and the Ready window are confirmed: remove Ctrl+F10 and its per-frame key
+   check (Rules: it was the only per-frame code), and Ctrl+F11 unless the window needs a fallback. Update config
+   descriptions, TEST-PLAN and DESIGN.
+3. **Other maps.** Only Factory has been resumed so far. One short Customs run first: weather restore (never run in
+   game: Factory has none; Forecaster installed), day/night time variant from the menu, and a real boss with followers
+   (Reshala) if one is near. Then, as Joel has time: Interchange (power switch, Killa), Reserve (D2 lever), Labs
+   (keycard check at the menu's Ready and no second keycard use), a big map load (Streets or Lighthouse).
+4. **Known gaps to decide with Joel** (not started): a resume that fails to load after RECONNECT starts a fresh raid
+   on the saved map (save then discarded at raid end, no duplication); the other-build discard path (reopening
+   `MainMenu()`) is untested; open B notes (a boss wave still in its `Delay` at save is lost, `Supports` escorts
+   re-roll difficulty, Halloween zombies not handled, small per-session stats lost). BTR, airdrops, artillery, transits
+   and seasonal events don't come back (DESIGN.md).
+5. **Merge** `c-server` (which contains `b2-bots`) to main when Joel says; commit and push each later step when he asks.
+6. **Release** (only after Joel's in-game checks with his usual mods): README rewritten for players (install both DLLs,
+   restart the server, what comes back and what doesn't), version 1.0.0 in both csprojs, `Plugin.Version` and the
+   server `ModMetadata`, a license (none yet; the server metadata says "All rights reserved" until Joel picks one),
+   release zip per Rules, GitHub release. Never call it release-ready before those checks.
 
 ## How the resume hooks in (B1)
 
@@ -135,14 +209,25 @@ Target install: `H:\SPT4.1.X` (SPT 4.1.6, EFT 0.16.9.40743). Repo https://github
   XP, counters and fail-on-death quests apply exactly as normal).
 - Hard exit (Alt-F4, crash) scraps the raid like standard SPT. A save is used up on Ready to Resume.
 - No combat continuity: restored bots start fresh. Don't add awareness seeding.
+- All UI must look like stock EFT: reuse the game's own screens, buttons, dialogs and text; no custom styling. Our
+  own words only where EFT has none (dialog sentences, the SAVE & QUIT label).
+- Saves stay at the SPT root (`<SPT>\SPSave\saves\<profile>\raid.spsave`); only the lock lives on the server.
+- A combat save's reconnect screen shows only LEAVE (ends as Killed). Abandon's question: "Abandon this raid? You will
+  be listed as Missing in Action and lose the gear you took in."
+- A Killed/MIA ending never shows the raid: the screen stays black from load to results.
 
 ## Layout
 
-- `src/SPSave/Core`: save file format and atomic write, combat rule, capture report. No Unity or game references.
-- `src/SPSave/Game`: capture (`RaidCapture`), read-back check (`RoundTrip`), hotkey controller, two patches.
+- `src/SPSave/Core`: save file format and atomic write, combat rule, capture report, wave trim, duplicate check,
+  resolve rule, mod-list check. No Unity or game references.
+- `src/SPSave/Game`: capture (`RaidCapture`, `CaptureController`, `PauseMenuButton`), resume (`ResumeSession`,
+  `ResumePatches`, `RaidRestore`, `BotRestore`, `Waves`, `ReadyController`), ending as Killed/MIA
+  (`ResolveController`, `ResolveBlackout`), the locked menu (`SavedRaidMenu`), server calls (`LockClient`), SAIN/ABPS
+  compatibility.
 - `tests/SPSave.Tests`: plain .NET, `dotnet run -c Release`.
 - `tools/FrameProbe`: separate measurement plugin for the on/off comparison. Not shipped.
 - `tools/SaveDump`: validates a save and extracts its sections.
+- `src/SPSave.Server`: the server mod (net10.0): the profile lock while a save waits.
 
 ## Build
 
@@ -150,6 +235,7 @@ The install must have SAIN (compile-time reference for the personality pin; at r
 
 ```
 dotnet build src\SPSave -c Release -p:SPTPath="H:\SPT4.1.X" [-p:DeployToSPT=true]
+dotnet build src\SPSave.Server -c Release -p:SPTPath="H:\SPT4.1.X" [-p:DeployToSPT=true]
 dotnet run -c Release --project tests\SPSave.Tests
 ```
 
@@ -209,4 +295,5 @@ Decompile with `ilspycmd` (global tool) when a new API is needed; never guess me
 - Nothing per frame in normal play. Step A's hotkey check is the only exception and goes away with the menu button.
   Anything that has to be recorded during play needs a reason here (currently: weather nodes, once per raid; the
   `Time.time` each wave scenario ran at, once per raid, because wave timers count from it and the game keeps no copy).
-- Release zips hold only `BepInEx/plugins/SPSave.dll`. Version in the csproj and `Plugin.Version`.
+- Release zips hold `BepInEx/plugins/SPSave.dll` and `SPT_Runtime/user/mods/SPSave/SPSave.Server.dll` (this install's
+  server folder is `SPT_Runtime`). Versions in both csprojs, `Plugin.Version` and the server's `ModMetadata`.

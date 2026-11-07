@@ -36,7 +36,17 @@ namespace SPSave.Game
             Run("search", notes, () => notes.Add(RestoreSearch(player, state.Player)));
             Run("weather", notes, () => notes.Add(RestoreWeather()));
             Run("time of day", notes, () => notes.Add(RestoreTimeOfDay(world, state.Clock)));
-            Run("bots", notes, () => notes.Add(BotRestore.Spawn(game as IBotGame, state)));
+            // A save being ended (Killed/MIA) ends a frame after the start: its bots would never be seen, and SAIN,
+            // which takes restored bots on only after Ready, throws in BotComponent.OnDisable for each one when the
+            // raid unloads (0.7.2 Abandon test: 9 bots, 18 errors).
+            if (ResumeSession.Outcome == null)
+            {
+                Run("bots", notes, () => notes.Add(BotRestore.Spawn(game as IBotGame, state)));
+            }
+            else
+            {
+                notes.Add($"bots not brought back: the raid ends as {ResumeSession.Outcome}");
+            }
             // ABPS reset its count in its BotsController.Init postfix, which ran before the game started.
             Run("ABPS", notes, () => notes.Add(AbpsCompat.WriteSpawnedPerPlayer(state.Waves?.AbpsBotsSpawnedPerPlayer)));
 

@@ -87,6 +87,7 @@ namespace SPSave.Game
                     return;
                 }
                 var retired = Core.SnapshotFile.Retire(path, DateTime.UtcNow);
+                LockClient.Unlock();
                 Plugin.Log.LogInfo($"Raid ended normally ({exitStatus}), so its save can't be resumed; moved to {retired}.");
             }
             catch (Exception e)

@@ -29,8 +29,11 @@ namespace SPSave.Game
         /// <summary>PreloaderUI's black overlay; its fade-in steps by Time.deltaTime, so game time stops only after it.</summary>
         private static readonly FieldInfo BlackOverlay = AccessTools.Field(typeof(PreloaderUI), "_overlapBlackImage");
 
+        private const string PromptText = "Your raid is restored and paused. Continue when you're ready.";
+
         private DateTime _frozenAt;
-        private GUIStyle _style;
+        private DialogWindowContext _prompt;
+        private bool _readyRequested;
 
         internal static void Attach(GameWorld world)
         {
@@ -46,8 +49,6 @@ namespace SPSave.Game
             ResumeSession.Phase = ResumePhase.WaitingForReady;
             Freeze.Begin(Singleton<GameWorld>.Instance?.MainPlayer);
             StartCoroutine(StopTimeAfterFadeIn());
-            NotificationManager.DisplayMessageNotification($"SPSave: raid restored. Press {Plugin.ReadyKey.Value} to take control.",
-                ENotificationDurationType.Long);
         }
 
         private IEnumerator StopTimeAfterFadeIn()
@@ -57,9 +58,49 @@ namespace SPSave.Game
             {
                 yield return null;
             }
+            if (ResumeSession.Phase != ResumePhase.WaitingForReady)
+            {
+                yield break;
+            }
+            // The stock message window (Joel: UI must look like stock EFT), opened before time stops so its own
+            // opening animation can play. The world is already held by Freeze.
+            ShowPrompt();
+            yield return new WaitForSecondsRealtime(0.6f);
             if (ResumeSession.Phase == ResumePhase.WaitingForReady)
             {
                 Time.timeScale = 0f;
+            }
+        }
+
+        private void ShowPrompt()
+        {
+            try
+            {
+                _prompt = ItemUiContext.Instance?.ShowMessageWindow(PromptText,
+                    () => _readyRequested = true,
+                    // Closed without accepting (Escape): ask again, the raid stays paused.
+                    () => { if (this != null && !_readyRequested) StartCoroutine(PromptAgain()); },
+                    "READY".Localized());
+                if (_prompt == null)
+                {
+                    NotificationManager.DisplayMessageNotification($"SPSave: raid restored. Press {Plugin.ReadyKey.Value} to take control.",
+                        ENotificationDurationType.Long);
+                }
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogError("Showing the Ready prompt failed; the Ready key still works: " + e);
+                NotificationManager.DisplayMessageNotification($"SPSave: raid restored. Press {Plugin.ReadyKey.Value} to take control.",
+                    ENotificationDurationType.Long);
+            }
+        }
+
+        private IEnumerator PromptAgain()
+        {
+            yield return null;
+            if (ResumeSession.Phase == ResumePhase.WaitingForReady && !_readyRequested)
+            {
+                ShowPrompt();
             }
         }
 
@@ -72,22 +113,14 @@ namespace SPSave.Game
 
         private void Update()
         {
-            if (Plugin.ReadyKey.Value.IsDown())
+            // The prompt's accept sets the flag; Ready runs here, a frame later, not inside the window's callback.
+            if (_readyRequested || Plugin.ReadyKey.Value.IsDown())
             {
+                _readyRequested = true;
+                _prompt?.CloseSilent();
+                _prompt = null;
                 Ready();
             }
-        }
-
-        private void OnGUI()
-        {
-            if (_style == null)
-            {
-                _style = new GUIStyle(GUI.skin.label) { fontSize = 28, alignment = TextAnchor.MiddleCenter, wordWrap = true };
-                _style.normal.textColor = Color.white;
-            }
-            var width = Screen.width * 0.6f;
-            GUI.Label(new Rect((Screen.width - width) / 2f, Screen.height * 0.38f, width, 120f),
-                $"Raid restored. Everything is paused.\nPress {Plugin.ReadyKey.Value} to take control.", _style);
         }
 
         private void Ready()
@@ -105,6 +138,10 @@ namespace SPSave.Game
             {
                 var retired = SnapshotFile.Retire(ResumeSession.SavePath, DateTime.UtcNow);
                 Plugin.Log.LogInfo($"Save used up and moved to {retired}.");
+            });
+            Step("unlocking the profile", () =>
+            {
+                Plugin.Log.LogInfo(LockClient.Unlock() ? "Profile unlocked on the server." : "The server didn't confirm the unlock; it unlocks at raid end.");
             });
             Step("found-in-raid check", () =>
             {
@@ -178,6 +215,8 @@ namespace SPSave.Game
 
         private void OnDestroy()
         {
+            _prompt?.CloseSilent();
+            _prompt = null;
             if (ResumeSession.Phase == ResumePhase.WaitingForReady)
             {
                 // The raid closed while still frozen (Leave from the menu): don't leave the game paused. The save

@@ -63,5 +63,8 @@ profile at `/client/match/local/end`, and the client only sends that from `GameE
   ones don't repeat. Checked against SAIN, ABPS and ORBIT first. Done (2026-11-06).
 - **B3. Repeat and finish:** a second save and resume of the same raid, then extraction applies progress exactly once,
   with a duplicate check. Done (2026-11-06; the extraction and duplicate check passed in game).
-- **C. Server mod and lock (next).** Save storage beside the profile, the menu lock, Abandon and Killed resolution.
-- **D. Pause-menu button, Ready to Resume prompt**, version and mod-list checks on resume.
+- **C. Server mod and lock.** The server locks the profile while a save waits; the menu is EFT's own reconnect mode
+  (RECONNECT resumes, LEAVE abandons as MIA); Abandon and Killed end the raid behind a black screen. Done on Factory
+  (2026-11-07).
+- **D. Pause-menu button, Ready to Resume prompt**, version and mod-list checks on resume. Built (0.8.0), not yet
+  tested in game. Then other maps, then release.

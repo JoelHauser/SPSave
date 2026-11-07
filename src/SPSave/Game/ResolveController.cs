@@ -67,6 +67,7 @@ namespace SPSave.Game
             {
                 var retired = SnapshotFile.Retire(ResumeSession.SavePath, DateTime.UtcNow);
                 Plugin.Log.LogInfo($"Save used up ({outcome}) and moved to {retired}.");
+                Plugin.Log.LogInfo(LockClient.Unlock() ? "Profile unlocked on the server." : "The server didn't confirm the unlock; it unlocks at raid end.");
             }
             catch (Exception e)
             {

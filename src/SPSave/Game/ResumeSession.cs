@@ -60,9 +60,10 @@ namespace SPSave.Game
 
         /// <summary>
         /// Fresh spawns are held in a resumed raid whose waves couldn't be restored (a save from before 0.4.0, or a
-        /// failure): the server's waves would start again from zero. Holds until the next raid starts.
+        /// failure): the server's waves would start again from zero, and in a raid being ended as Killed/MIA, which
+        /// has no bots at all. Holds until the next raid starts.
         /// </summary>
-        internal static bool HoldFreshSpawns => Phase != ResumePhase.None && !WavesRestored;
+        internal static bool HoldFreshSpawns => Phase != ResumePhase.None && (!WavesRestored || Outcome != null);
 
         internal static bool IsRestoredBot(Profile profile) =>
             profile != null && profile.Id != null && BotProfiles.TryGetValue(profile.Id, out var restored) && ReferenceEquals(restored, profile);
@@ -75,7 +76,7 @@ namespace SPSave.Game
 
         internal static void TryBegin(TarkovApplication app)
         {
-            var requested = Requested ?? Plugin.TestOutcome();
+            var requested = Requested;
             Requested = null;
             Reset();
             if (!Plugin.ResumeEnabled.Value)
@@ -303,6 +304,11 @@ namespace SPSave.Game
         /// <summary>Gear, heads and clothing of every saved living bot; a normal spawn loads them with the bot's profile.</summary>
         internal static IEnumerable<ResourceKey> BotBundles()
         {
+            if (Outcome != null)
+            {
+                // Ending the raid: no bots come back (RaidRestore), so none of their gear is needed.
+                return new List<ResourceKey>();
+            }
             return BotProfiles.Values.SelectMany(bot => bot.GetAllPrefabPaths()).ToList();
         }
 

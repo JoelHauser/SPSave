@@ -4,21 +4,31 @@ using System.Diagnostics;
 using System.IO;
 using EFT;
 using EFT.Communications;
+using EFT.UI;
 using SPSave.Core;
 using UnityEngine;
 
 namespace SPSave.Game
 {
     /// <summary>
-    /// Save &amp; Quit on a hotkey (the pause-menu button comes later): capture the raid, write it, read it back, and
-    /// close the game. Quitting means GameEnd never runs, so the server gets no raid end: no extract, death or MIA.
-    /// Refused in combat for now; Joel's rule (a combat save resolves as Killed) needs the server mod (Step C).
-    /// Its Update is the mod's only per-frame code during play: one key check.
+    /// Save &amp; Quit: capture the raid, write it, read it back, lock the profile on the server, and close the game.
+    /// Quitting means GameEnd never runs, so the server gets no raid end: no extract, death or MIA.
+    /// From the pause menu's SAVE &amp; QUIT (PauseMenuButton): in combat it asks first in the stock dialog, and a
+    /// confirmed combat save is marked to end as Killed (ResolveRule). The hotkey stays as a fallback until the
+    /// button is checked in game; it still refuses in combat (no cursor for a dialog mid-raid). Its Update is the
+    /// mod's only per-frame code during play: one key check, which goes with the hotkey.
     /// </summary>
     internal sealed class CaptureController : MonoBehaviour
     {
         /// <summary>Set once a save is confirmed and the game is closing; RaidEndPatch must not discard that save.</summary>
         internal static bool Quitting;
+
+        /// <summary>The raid's controller, for the pause-menu button.</summary>
+        internal static CaptureController Current;
+
+        private const string CombatText =
+            "You are in combat. If you save now, this raid will end as Killed when you come back, and you will lose the " +
+            "gear you took in. Save and quit anyway?";
 
         private bool _busy;
 
@@ -26,12 +36,25 @@ namespace SPSave.Game
         {
             if (world.GetComponent<CaptureController>() == null)
             {
-                world.gameObject.AddComponent<CaptureController>();
+                Current = world.gameObject.AddComponent<CaptureController>();
+            }
+        }
+
+        /// <summary>The pause menu's SAVE &amp; QUIT.</summary>
+        internal void RequestFromMenu()
+        {
+            if (!_busy)
+            {
+                SaveAndQuit(fromMenu: true, combatConfirmed: false);
             }
         }
 
         private void OnDestroy()
         {
+            if (Current == this)
+            {
+                Current = null;
+            }
             // The raid is over: whatever a resume left behind no longer applies.
             ResumeSession.Reset();
         }
@@ -40,28 +63,43 @@ namespace SPSave.Game
         {
             if (!_busy && Plugin.CaptureKey.Value.IsDown())
             {
-                SaveAndQuit();
+                SaveAndQuit(fromMenu: false, combatConfirmed: false);
             }
         }
 
-        private void SaveAndQuit()
+        private void SaveAndQuit(bool fromMenu, bool combatConfirmed)
         {
             if (ResumeSession.Phase == ResumePhase.WaitingForReady)
             {
-                NotificationManager.DisplayWarningNotification("SPSave: take control first (Ctrl+F11), then save.");
+                NotificationManager.DisplayWarningNotification("SPSave: take control first, then save.");
                 return;
             }
 
             var frame = Stopwatch.StartNew();
             try
             {
+                // Combat is judged at this moment (DESIGN.md), also after a confirmation: a player who broke contact
+                // while answering saves normally.
                 var result = RaidCapture.Run(Plugin.CombatWindowSeconds.Value);
                 var report = result.Report;
+                if (report.InCombat && !combatConfirmed)
+                {
+                    Plugin.Log.LogInfo((fromMenu ? "Save in combat, asking first: " : "Save refused: ") + report.CombatDetail);
+                    if (fromMenu)
+                    {
+                        ItemUiContext.Instance.ShowMessageWindow(CombatText,
+                            () => SaveAndQuit(fromMenu: true, combatConfirmed: true), null, "CONFIRMATION".Localized());
+                    }
+                    else
+                    {
+                        NotificationManager.DisplayWarningNotification("SPSave: you're in combat. Break contact for 30 seconds, then save.");
+                    }
+                    return;
+                }
                 if (report.InCombat)
                 {
-                    Plugin.Log.LogInfo("Save refused: " + report.CombatDetail);
-                    NotificationManager.DisplayWarningNotification("SPSave: you're in combat. Break contact for 30 seconds, then save.");
-                    return;
+                    MarkSavedInCombat(result);
+                    Plugin.Log.LogInfo("Saving in combat (confirmed): this raid will end as Killed. " + report.CombatDetail);
                 }
 
                 var path = Plugin.SavePath(result.ProfileId);
@@ -98,6 +136,18 @@ namespace SPSave.Game
                     return;
                 }
 
+                // The lock goes on before the game closes: without it the stash and traders could change while
+                // the save waits, and resuming would duplicate or lose gear. No lock, no save.
+                var manifest = ReadManifest(result);
+                if (manifest == null || !LockClient.Lock(manifest))
+                {
+                    SnapshotFile.Retire(path, DateTime.UtcNow);
+                    Plugin.Log.LogWarning("The server didn't confirm the lock; save discarded. Is the SPSave server mod installed?");
+                    NotificationManager.DisplayWarningNotification("SPSave: the server didn't confirm the save (is the SPSave server mod installed?). Your raid continues.");
+                    return;
+                }
+                Plugin.Log.LogInfo($"Profile locked on the server until this save is resumed or abandoned ({manifest.Map}, {manifest.ServerId}).");
+
                 Quitting = true;
                 _busy = true;
                 NotificationManager.DisplayMessageNotification("SPSave: raid saved. Closing the game...");
@@ -108,6 +158,36 @@ namespace SPSave.Game
                 Plugin.Log.LogError("Save failed: " + e);
                 NotificationManager.DisplayWarningNotification("SPSave: the save failed. Your raid continues. See the BepInEx log.");
             }
+        }
+
+        /// <summary>The manifest's ResolveAs makes the next load end the raid as Killed (ResolveRule).</summary>
+        private static void MarkSavedInCombat(CaptureResult result)
+        {
+            for (var i = 0; i < result.Sections.Count; i++)
+            {
+                if (result.Sections[i].Key != RaidCapture.ManifestSection)
+                {
+                    continue;
+                }
+                var manifest = Newtonsoft.Json.JsonConvert.DeserializeObject<Manifest>(System.Text.Encoding.UTF8.GetString(result.Sections[i].Value));
+                manifest.ResolveAs = ResolveRule.SavedInCombat;
+                var bytes = System.Text.Encoding.UTF8.GetBytes(Newtonsoft.Json.JsonConvert.SerializeObject(manifest, Newtonsoft.Json.Formatting.Indented));
+                result.Sections[i] = new System.Collections.Generic.KeyValuePair<string, byte[]>(RaidCapture.ManifestSection, bytes);
+                return;
+            }
+            throw new InvalidOperationException("The capture has no manifest.");
+        }
+
+        private static Manifest ReadManifest(CaptureResult result)
+        {
+            foreach (var section in result.Sections)
+            {
+                if (section.Key == RaidCapture.ManifestSection)
+                {
+                    return Newtonsoft.Json.JsonConvert.DeserializeObject<Manifest>(System.Text.Encoding.UTF8.GetString(section.Value));
+                }
+            }
+            return null;
         }
 
         private static IEnumerator QuitSoon()

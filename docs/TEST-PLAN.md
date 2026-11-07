@@ -189,3 +189,38 @@ search one container. Note your level XP on the character screen before the raid
 
 Send back: the SPSave lines from `BepInEx\LogOutput.log` ("This load ends the saved raid as ...", "Save used up",
 "Ending the saved raid ..."), and anything on screen that looked off.
+
+## C3. The locked menu (0.7.0)
+
+Install both DLLs from the zip (client plugin and `SPT_Runtime\user\mods\SPSave\SPSave.Server.dll`), then restart
+the **server** too. The server console should show `[SPSave] Loaded: 8 lock patches.` Short Factory runs.
+
+1. **Lock.** Make a save (Ctrl+F10). The game closes. The server console shows `[SPSave] Profile ... locked`.
+2. **Locked menu.** Start the game. Expected: the main menu in EFT's reconnect mode. The big button reads RECONNECT,
+   Trade, Hideout and Character are hidden, and the bottom bar is greyed out. Nothing on screen should look like it
+   came from a mod.
+3. **Leave, then cancel.** RECONNECT opens the reconnect screen (map, level, character). Press LEAVE, then answer
+   No in the confirmation. Expected: back on the reconnect screen, its buttons working.
+4. **Resume.** Press RECONNECT on that screen. Expected: the Factory raid loads without the map screens and resumes
+   as before (Ctrl+F11 to take control). The server console shows `[SPSave] Profile ... unlocked`. Escape, then
+   Leave, as usual.
+5. **Abandon.** Make another save, restart, RECONNECT, LEAVE, Yes. Expected: black screen, then MIA results, as in
+   C2. After that, the normal main menu is back.
+
+Send back: the SPSave lines from `BepInEx\LogOutput.log`, the `[SPSave]` lines from the server console or
+`SPT_Runtime\user\logs\spt\`, and anything that looked off, especially anything that didn't look like stock EFT.
+
+## D1. Pause menu, Ready prompt, mod check (0.8.0)
+
+Short Factory runs. Server mod unchanged (0.7.1).
+
+1. **SAVE & QUIT.** In a raid, press Escape. Expected: a SAVE & QUIT button above LEAVE, looking exactly like LEAVE.
+   Not in combat: press it; the game saves and closes as Ctrl+F10 did.
+2. **Ready prompt.** Resume that save. Expected: after loading, EFT's own message window: "Your raid is restored and
+   paused. Continue when you're ready." Click its button: you take control. Check the mouse cursor shows and the
+   button works with time stopped. If the window doesn't work, Ctrl+F11 still does.
+3. **No LEAVE while paused.** Before taking control, press Escape. Expected: no LEAVE and no SAVE & QUIT.
+4. **Combat save.** Let a scav shoot at you, Escape, SAVE & QUIT. Expected: a confirmation that the raid will end as
+   Killed. Yes saves and closes. On the next start the reconnect screen shows only LEAVE; LEAVE ends it as Killed.
+5. **Mod check.** Make a save, then disable one small client mod (or change nothing and skip this). On RECONNECT
+   expect a confirmation naming the mod.
