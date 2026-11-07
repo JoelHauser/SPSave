@@ -182,10 +182,10 @@ every member checked against the installed DLLs; a missing member refuses saves 
 - Not yet seen in game: recruits rejoining, boss allies, Abandon/Killed with a squadmate. Report the menu-record
   behaviour to pitAlex (it keeps whatever layout it sees first).
 
-Repo: everything through 0.9.11 / server 0.8.0 is committed and pushed on `c-server` (2026-11-07), which
+Repo: everything through 0.9.12 / server 0.9.0 is committed and pushed on `c-server` (2026-11-07), which
 contains `b2-bots`; `main` has B1 plus the README. Test zips in `dist/` (ignored by git), latest `SPSave-0.9.6-test.zip`.
 
-## Upcoming steps (as of 2026-11-07, in order; client 0.9.11 installed)
+## Upcoming steps (as of 2026-11-07, in order; client 0.9.12, server 0.9.0 installed)
 
 1. **Customs: passed in game 2026-11-07** (two runs, each save → RECONNECT → second save → RECONNECT → LEAVE):
    night time variant and weather (550/552 nodes) came back as left (Joel), an opened door stayed open, the Pit
@@ -210,10 +210,29 @@ contains `b2-bots`; `main` has B1 plus the README. Test zips in `dist/` (ignored
    Logs: read them before the next launch, which overwrites BepInEx's and EFT's.
 2. **Other maps** as Joel has time: Interchange (power switch, Killa), Reserve (D2 lever), Labs (keycard check at
    RECONNECT, no second keycard use), a big map load (Streets or Lighthouse).
-3. **Known gaps to decide with Joel:** a removed mod whose items are in the save makes RECONNECT start a fresh raid (no
-   duplication; better: check templates first and offer only LEAVE); SPT version not recorded; client mod removed
-   while the server holds a lock leaves the profile locked; daily-quest rotation while a save waits (raid end copies
-   the saved quests; unchecked). Older B notes: a boss wave in its `Delay` at save is lost, `Supports` escorts re-roll
+3. **Known gaps** (Joel 2026-11-07: work on SPT version, daily quests, zombies; ignore the rest for now):
+   - SPT version: already covered. The manifest has `SptVersion` (client `com.SPT.core`, "4.1.6") and the plugin list
+     has `com.SPT.core@…`, so an SPT update shows in `ModListCheck`'s "Your mods changed… Resume anyway?".
+   - Daily/weekly quests: the menu calls `client/repeatalbeQuests/activityPeriods` on every load (not locked);
+     `RepeatableQuestController.GetClientRepeatableQuests` rotates an expired set (`ProcessExpiredQuests` removes the
+     old statuses from `pmcData.Quests`, new set generated), and `local/end` then assigns the saved `Quests`
+     (`pmcData.Quests = profile.Quests`; `RepeatableQuests` isn't assigned). **Server 0.9.0 (installed, not
+     tested in game):** `RepeatableQuestsFreezePatch` sets every set's `EndTime` to max while locked and restores it in the
+     postfix, so nothing rotates until the first menu after the raid. Test: Save & Quit, stop the server, set a
+     daily `EndTime` in the past in the profile, start it, menu → log "Kept N expired repeatable quest set(s)";
+     resume and extract → next menu rotates.
+   - Zombies (Halloween infection): off here (`seasonalevents.json` `zombieSettings.enabled: false`; Halloween
+     itself on 10/28–11/9, summoning enabled). `BotsEventsController` builds `BotHalloweenWithZombies` from
+     `Halloween2024` location config, `Activate` subscribes every bot in `BotsList` and `OnBotAdd`, so restored zombies
+     should be picked up. `CheckMidSessionTriggerBotsSpawn` fires `SpawnAction` once at half the session time
+     (`_midSessionSpawned`, not saved): a save after the half point would fire it again on resume. Pursuits and crowd
+     spawns are runtime state (lost, like awareness). **0.9.12 (installed, not tested in game; Joel won't test
+     zombies):** `ZombieMidSessionPatch` (postfix on `BotHalloweenWithZombies.Activate`, resume only) sets
+     `_midSessionSpawned` from the saved clock (past ≥ half session). Unchecked: zombie asset pools for restored
+     zombies, any player infection effect, the summoning event's state (`HalloweenEventController`: ritual, exits).
+     Mod page: list zombies as untested.
+   - Not now: removed mod's items in a save; client mod removed while locked.
+   Older B notes: a boss wave in its `Delay` at save is lost, `Supports` escorts re-roll
    difficulty, Halloween zombies, small per-session stats. BTR, airdrops, artillery, transits, seasonal events don't
    come back (DESIGN.md).
 4. **Merge** `c-server` into main when Joel says; commit and push each later step when he asks.

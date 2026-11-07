@@ -5,7 +5,7 @@
     <AssemblyName>SPSave</AssemblyName>
     <RootNamespace>SPSave</RootNamespace>
     <!-- Keep in step with Plugin.Version. -->
-    <Version>0.9.11</Version>
+    <Version>0.9.12</Version>
     <LangVersion>latest</LangVersion>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <DebugType>none</DebugType>
