@@ -7,9 +7,9 @@ namespace SPSave.Game
     /// <summary>The server's view of a waiting save (SPSave server mod, /spsave/status).</summary>
     internal sealed class LockStatus
     {
-        [JsonProperty("locked")] public bool Locked;
-        [JsonProperty("map")] public string Map;
-        [JsonProperty("serverId")] public string ServerId;
+        [JsonProperty("locked")] public bool Locked { get; set; }
+        [JsonProperty("map")] public string Map { get; set; }
+        [JsonProperty("serverId")] public string ServerId { get; set; }
     }
 
     /// <summary>

@@ -29,8 +29,10 @@ namespace SPSave.Game
     {
         private const string AbandonText =
             "Abandon this raid? You will be listed as Missing in Action and lose the gear you took in.";
+        private const string CombatNoticeText =
+            "You quit this raid during combat, so you were killed. The gear you took in is lost.";
         private const string CombatLeaveText =
-            "This raid was saved in combat. Leaving ends it: you will be listed as Killed and lose the gear you took in.";
+            "You quit this raid during combat. Leaving ends it: you will be listed as Killed and lose the gear you took in.";
 
         private static readonly FieldInfo MenuOperationField = AccessTools.Field(typeof(TarkovApplication), "_menuOperation");
 
@@ -123,6 +125,13 @@ namespace SPSave.Game
             };
             controller.OnLeave += () => ConfirmLeave(app, manifest, controller, combat, otherBuild);
             controller.ShowScreen(EScreenState.Queued);
+            if (combat && !otherBuild)
+            {
+                // The reconnect screen has no text of its own to say why only LEAVE is there (map name, level, model
+                // and banners only), so EFT's message window says it, OK only (no cancel action: no close button).
+                ItemUiContext.Instance.ShowMessageWindow(CombatNoticeText, () => { }, null, "Attention".Localized());
+                Plugin.Log.LogInfo("Combat save: told the player they quit in combat and were killed.");
+            }
         }
 
         private const string ModsChangedText =

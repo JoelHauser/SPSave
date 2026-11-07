@@ -3,7 +3,6 @@ using System.Collections;
 using System.Reflection;
 using Comfort.Common;
 using EFT;
-using EFT.Communications;
 using EFT.UI;
 using EFT.UI.BattleTimer;
 using HarmonyLib;
@@ -13,10 +12,12 @@ using UnityEngine;
 namespace SPSave.Game
 {
     /// <summary>
-    /// Holds a restored raid frozen (see Freeze) until the player presses the Ready key, then gives them control
-    /// with the clock exactly where it was saved. Exists only while waiting; it is destroyed on Ready, so it costs
-    /// nothing during play. Timer handling follows the Pause mod (netVnum.Pause): shift the raid timer and the timer
-    /// panel by the time spent frozen.
+    /// Finishes a resume once PreloaderUI's black overlay has faded: uses up the save, unlocks the profile and puts the
+    /// raid clock and timer panels right. Joel (2026-11-06): no Ready window, no key, straight back into the raid.
+    /// Nothing is held during the fade, as in a normal raid start: 0.8.5 still froze the player (Freeze, removed in
+    /// 0.8.6), which left the arms stuck in a pose and took control away for a moment after (Joel: not polished).
+    /// Exists only for the fade; destroyed after, so it costs nothing during play. Timer handling follows the Pause
+    /// mod (netVnum.Pause): the raid timer and panels are shifted by the time the fade took, as when it was frozen.
     /// </summary>
     internal sealed class ReadyController : MonoBehaviour
     {
@@ -26,14 +27,10 @@ namespace SPSave.Game
         private static readonly AccessTools.FieldRef<TimerPanel, DateTime> TimerPanelEnd =
             AccessTools.FieldRefAccess<TimerPanel, DateTime>("_dateTime");
 
-        /// <summary>PreloaderUI's black overlay; its fade-in steps by Time.deltaTime, so game time stops only after it.</summary>
+        /// <summary>PreloaderUI's black overlay; the resume is finished once it is gone.</summary>
         private static readonly FieldInfo BlackOverlay = AccessTools.Field(typeof(PreloaderUI), "_overlapBlackImage");
 
-        private const string PromptText = "Your raid is restored and paused. Continue when you're ready.";
-
-        private DateTime _frozenAt;
-        private DialogWindowContext _prompt;
-        private bool _readyRequested;
+        private DateTime _startedAt;
 
         internal static void Attach(GameWorld world)
         {
@@ -45,62 +42,24 @@ namespace SPSave.Game
 
         private void Start()
         {
-            _frozenAt = DateTimeExtensions.UtcNow;
-            ResumeSession.Phase = ResumePhase.WaitingForReady;
-            Freeze.Begin(Singleton<GameWorld>.Instance?.MainPlayer);
-            StartCoroutine(StopTimeAfterFadeIn());
+            _startedAt = DateTimeExtensions.UtcNow;
+            ResumeSession.Phase = ResumePhase.Finishing;
+            PitFireTeamCompat.PlaceSquad(ResumeSession.State);
+            StartCoroutine(ReadyAfterFadeIn());
         }
 
-        private IEnumerator StopTimeAfterFadeIn()
+        private IEnumerator ReadyAfterFadeIn()
         {
             var giveUpAt = Time.realtimeSinceStartup + 8f;
             while (BlackScreenShowing() && Time.realtimeSinceStartup < giveUpAt)
             {
                 yield return null;
             }
-            if (ResumeSession.Phase != ResumePhase.WaitingForReady)
-            {
-                yield break;
-            }
-            // The stock message window (Joel: UI must look like stock EFT), opened before time stops so its own
-            // opening animation can play. The world is already held by Freeze.
-            ShowPrompt();
-            yield return new WaitForSecondsRealtime(0.6f);
-            if (ResumeSession.Phase == ResumePhase.WaitingForReady)
-            {
-                Time.timeScale = 0f;
-            }
-        }
-
-        private void ShowPrompt()
-        {
-            try
-            {
-                _prompt = ItemUiContext.Instance?.ShowMessageWindow(PromptText,
-                    () => _readyRequested = true,
-                    // Closed without accepting (Escape): ask again, the raid stays paused.
-                    () => { if (this != null && !_readyRequested) StartCoroutine(PromptAgain()); },
-                    "READY".Localized());
-                if (_prompt == null)
-                {
-                    NotificationManager.DisplayMessageNotification($"SPSave: raid restored. Press {Plugin.ReadyKey.Value} to take control.",
-                        ENotificationDurationType.Long);
-                }
-            }
-            catch (Exception e)
-            {
-                Plugin.Log.LogError("Showing the Ready prompt failed; the Ready key still works: " + e);
-                NotificationManager.DisplayMessageNotification($"SPSave: raid restored. Press {Plugin.ReadyKey.Value} to take control.",
-                    ENotificationDurationType.Long);
-            }
-        }
-
-        private IEnumerator PromptAgain()
-        {
+            // A frame later, not inside whatever ended the fade.
             yield return null;
-            if (ResumeSession.Phase == ResumePhase.WaitingForReady && !_readyRequested)
+            if (ResumeSession.Phase == ResumePhase.Finishing)
             {
-                ShowPrompt();
+                Ready();
             }
         }
 
@@ -111,23 +70,10 @@ namespace SPSave.Game
             return overlay != null && overlay.gameObject.activeInHierarchy;
         }
 
-        private void Update()
-        {
-            // The prompt's accept sets the flag; Ready runs here, a frame later, not inside the window's callback.
-            if (_readyRequested || Plugin.ReadyKey.Value.IsDown())
-            {
-                _readyRequested = true;
-                _prompt?.CloseSilent();
-                _prompt = null;
-                Ready();
-            }
-        }
-
         private void Ready()
         {
-            var frozen = DateTimeExtensions.UtcNow - _frozenAt;
-            Time.timeScale = 1f;
-            Step("unfreeze", Freeze.End);
+            // Time from the game start to the end of the fade; the clock is shifted by it, so the time left is what was saved.
+            var faded = DateTimeExtensions.UtcNow - _startedAt;
             var game = Singleton<AbstractGame>.Instance as BaseLocalGame<EftGamePlayerOwner>;
             var timer = game?.GameTimer;
             var clock = ResumeSession.State?.Clock;
@@ -151,17 +97,17 @@ namespace SPSave.Game
             {
                 if (timer?._startDateTime != null && timer._escapeDateTime != null)
                 {
-                    timer._startDateTime = timer._startDateTime.Value + frozen;
-                    timer._escapeDateTime = timer._escapeDateTime.Value + frozen;
+                    timer._startDateTime = timer._startDateTime.Value + faded;
+                    timer._escapeDateTime = timer._escapeDateTime.Value + faded;
                 }
             });
             Step("timer panels", () =>
             {
                 // The panels were set when the game started (ExtractionTimersPanel.SetTime) from the full raid
                 // length, not the time left: the main timer gets the raid's real end; each extract timer, set to
-                // now + its own time, loses the time already played and gains the time spent frozen. Panels that
+                // now + its own time, loses the time already played and gains the fade time. Panels that
                 // were never shown have no end time (DateTime.MinValue) and are left alone.
-                var shift = frozen - TimeSpan.FromSeconds(clock?.PastSeconds ?? 0d);
+                var shift = faded - TimeSpan.FromSeconds(clock?.PastSeconds ?? 0d);
                 foreach (var panel in FindObjectsOfType<TimerPanel>(true))
                 {
                     var end = TimerPanelEnd(panel);
@@ -196,7 +142,7 @@ namespace SPSave.Game
             });
 
             var left = timer?._escapeDateTime != null ? (timer._escapeDateTime.Value - DateTimeExtensions.UtcNow).TotalSeconds : 0d;
-            Plugin.Log.LogInfo($"Player took control after {frozen.TotalSeconds:F0} s frozen; {left:F0} s left of {timer?.SessionSeconds()}.");
+            Plugin.Log.LogInfo($"Resume finished {faded.TotalSeconds:F1} s after the raid started (loading fade); {left:F0} s left of {timer?.SessionSeconds()}.");
             ResumeSession.GoLive();
             Destroy(this);
         }
@@ -215,14 +161,9 @@ namespace SPSave.Game
 
         private void OnDestroy()
         {
-            _prompt?.CloseSilent();
-            _prompt = null;
-            if (ResumeSession.Phase == ResumePhase.WaitingForReady)
+            if (ResumeSession.Phase == ResumePhase.Finishing)
             {
-                // The raid closed while still frozen (Leave from the menu): don't leave the game paused. The save
-                // was not used up, so it can be resumed again.
-                Time.timeScale = 1f;
-                Freeze.End();
+                // The raid closed during the fade: the save was not used up, so it can be resumed again.
                 ResumeSession.Reset();
             }
         }

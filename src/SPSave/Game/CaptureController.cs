@@ -14,9 +14,8 @@ namespace SPSave.Game
     /// Save &amp; Quit: capture the raid, write it, read it back, lock the profile on the server, and close the game.
     /// Quitting means GameEnd never runs, so the server gets no raid end: no extract, death or MIA.
     /// From the pause menu's SAVE &amp; QUIT (PauseMenuButton): in combat it asks first in the stock dialog, and a
-    /// confirmed combat save is marked to end as Killed (ResolveRule). The hotkey stays as a fallback until the
-    /// button is checked in game; it still refuses in combat (no cursor for a dialog mid-raid). Its Update is the
-    /// mod's only per-frame code during play: one key check, which goes with the hotkey.
+    /// confirmed combat save is marked to end as Killed (ResolveRule). No hotkey and no per-frame code: the Ctrl+F10
+    /// fallback went once the button worked in game (0.8.5).
     /// </summary>
     internal sealed class CaptureController : MonoBehaviour
     {
@@ -25,6 +24,12 @@ namespace SPSave.Game
 
         /// <summary>The raid's controller, for the pause-menu button.</summary>
         internal static CaptureController Current;
+
+        /// <summary>
+        /// Only PMC raids are saved: a resume rebuilds a PMC raid (ResumeSession.Begin, the server lock's side), so a
+        /// Scav raid saved here could never come back, and its lock would hold the PMC profile.
+        /// </summary>
+        internal static bool ScavRaid => Comfort.Common.Singleton<GameWorld>.Instance?.MainPlayer?.Side == EPlayerSide.Savage;
 
         private const string CombatText =
             "You are in combat. If you save now, this raid will end as Killed when you come back, and you will lose the " +
@@ -37,6 +42,7 @@ namespace SPSave.Game
             if (world.GetComponent<CaptureController>() == null)
             {
                 Current = world.gameObject.AddComponent<CaptureController>();
+                PitFireTeamCompat.Prepare();
             }
         }
 
@@ -45,7 +51,7 @@ namespace SPSave.Game
         {
             if (!_busy)
             {
-                SaveAndQuit(fromMenu: true, combatConfirmed: false);
+                SaveAndQuit(combatConfirmed: false);
             }
         }
 
@@ -59,19 +65,16 @@ namespace SPSave.Game
             ResumeSession.Reset();
         }
 
-        private void Update()
+        private void SaveAndQuit(bool combatConfirmed)
         {
-            if (!_busy && Plugin.CaptureKey.Value.IsDown())
+            if (ScavRaid)
             {
-                SaveAndQuit(fromMenu: false, combatConfirmed: false);
+                NotificationManager.DisplayWarningNotification("SPSave: only PMC raids can be saved.");
+                return;
             }
-        }
-
-        private void SaveAndQuit(bool fromMenu, bool combatConfirmed)
-        {
-            if (ResumeSession.Phase == ResumePhase.WaitingForReady)
+            if (ResumeSession.Phase == ResumePhase.Finishing)
             {
-                NotificationManager.DisplayWarningNotification("SPSave: take control first, then save.");
+                NotificationManager.DisplayWarningNotification("SPSave: wait until the raid has loaded, then save.");
                 return;
             }
 
@@ -84,16 +87,13 @@ namespace SPSave.Game
                 var report = result.Report;
                 if (report.InCombat && !combatConfirmed)
                 {
-                    Plugin.Log.LogInfo((fromMenu ? "Save in combat, asking first: " : "Save refused: ") + report.CombatDetail);
-                    if (fromMenu)
-                    {
-                        ItemUiContext.Instance.ShowMessageWindow(CombatText,
-                            () => SaveAndQuit(fromMenu: true, combatConfirmed: true), null, "CONFIRMATION".Localized());
-                    }
-                    else
-                    {
-                        NotificationManager.DisplayWarningNotification("SPSave: you're in combat. Break contact for 30 seconds, then save.");
-                    }
+                    Plugin.Log.LogInfo("Save in combat, asking first: " + report.CombatDetail);
+                    // forceShow: in a raid (InGameStatus.InRaid) ItemUiContext.method_1 skips the window and runs the
+                    // accept action at once (0.8.0/0.8.1 saved in combat without asking).
+                    ItemUiContext.Instance.ShowMessageWindow(CombatText,
+                        () => SaveAndQuit(combatConfirmed: true),
+                        () => Plugin.Log.LogInfo("Save in combat cancelled: the raid goes on."),
+                        "CONFIRMATION".Localized(), forceShow: true);
                     return;
                 }
                 if (report.InCombat)

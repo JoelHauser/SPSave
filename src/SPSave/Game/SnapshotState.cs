@@ -32,6 +32,30 @@ namespace SPSave.Game
         public CombatState Combat;
         /// <summary>Null in saves before 0.4.0: those resume with fresh spawns held.</summary>
         public WavesState Waves;
+        /// <summary>The player's living Pit FireTeam followers (PitFireTeamCompat); null when Pit FireTeam isn't loaded.</summary>
+        public List<PitFollowerState> PitFollowers;
+    }
+
+    /// <summary>
+    /// One Pit FireTeam follower of the player at save time (docs/PITFIRETEAM-COMPAT.md). The bot itself (profile,
+    /// position) is in the save like any other; this says how Pit FireTeam knew it.
+    /// </summary>
+    public sealed class PitFollowerState
+    {
+        public const string Squadmate = "squadmate";
+        public const string BossAlly = "bossAlly";
+        public const string Recruit = "recruit";
+
+        public string ProfileId;
+        public string AccountId;
+        public string Nickname;
+        /// <summary>Squadmate (saved roster member), BossAlly (Knight/Big Pipe/Birdeye companion) or Recruit (raid pickup).</summary>
+        public string Kind;
+        public string Role;
+        /// <summary>Pit FireTeam's protected equipment ids for this follower (InteractableObjects.GetStoredEquipment).</summary>
+        public List<string> ProtectedEquipmentIds = new List<string>();
+        /// <summary>Items it carries for return after the raid (InteractableObjects.GetStoredItems).</summary>
+        public List<string> TrackedReturnItemIds = new List<string>();
     }
 
     /// <summary>

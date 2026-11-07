@@ -5,7 +5,7 @@
     <AssemblyName>SPSave</AssemblyName>
     <RootNamespace>SPSave</RootNamespace>
     <!-- Keep in step with Plugin.Version. -->
-    <Version>0.8.0</Version>
+    <Version>0.9.7</Version>
     <LangVersion>latest</LangVersion>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <DebugType>none</DebugType>
@@ -39,6 +39,7 @@
     <Reference Include="Newtonsoft.Json"><HintPath>$(SPTManagedPath)\Newtonsoft.Json.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine"><HintPath>$(SPTManagedPath)\UnityEngine.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.CoreModule"><HintPath>$(SPTManagedPath)\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UI"><HintPath>$(SPTManagedPath)\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.PhysicsModule"><HintPath>$(SPTManagedPath)\UnityEngine.PhysicsModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(SPTManagedPath)\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(SPTManagedPath)\UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private></Reference>

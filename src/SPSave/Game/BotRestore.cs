@@ -18,8 +18,8 @@ namespace SPSave.Game
     /// they had. Bosses, followers and PMCs get one BotsGroup per saved group (as the game does for bosses and ABPS
     /// for PMC squads), so squads stay friends; a saved boss calls SetBoss and its followers rejoin it.
     ///
-    /// Creation is asynchronous (the player object loads); the bots appear over the next frames, while the raid is
-    /// still frozen.
+    /// Creation is asynchronous (the player object loads); the bots appear over the next frames, behind the
+    /// loading fade.
     /// </summary>
     internal static class BotRestore
     {
@@ -41,8 +41,15 @@ namespace SPSave.Game
             var groups = new Dictionary<int, BotsGroup>();
             int started = 0, missing = 0, failed = 0;
             // Bosses first, as the game spawns them before their followers.
+            var pitSpawns = 0;
             foreach (var saved in bots.OrderByDescending(b => b.Boss))
             {
+                // Pit FireTeam squadmates and boss allies are spawned by Pit FireTeam itself (PitFireTeamCompat.PrepareResume).
+                if (PitFireTeamCompat.SpawnedByPit(state, saved.ProfileId))
+                {
+                    pitSpawns++;
+                    continue;
+                }
                 if (!ResumeSession.BotProfiles.TryGetValue(saved.ProfileId, out var profile))
                 {
                     missing++;
@@ -55,10 +62,15 @@ namespace SPSave.Game
                                ?? spawner.GetClosestZone(position, out _);
                     var corePoint = controller.CoversData.GetClosest(position).CorePointInGame.Id;
                     var current = saved;
+                    PitFireTeamCompat.MarkRecruit(state, saved.ProfileId);
                     spawner._inSpawnProcess++;
                     var task = creator.ActivateBot(profile, new PositionNote(position, corePoint, isUsed: true), zone, shallBeGroup: false,
                         (bot, botZone) => GroupFor(spawner, bot, botZone, current, groups, sizes),
-                        bot => Activated(spawner, bot, current),
+                        bot =>
+                        {
+                            Activated(spawner, bot, current);
+                            PitFireTeamCompat.RejoinRecruit(state, bot);
+                        },
                         spawner.GetCancelToken());
                     Watch(task, saved.ProfileId);
                     started++;
@@ -69,7 +81,7 @@ namespace SPSave.Game
                     Plugin.Log.LogError($"Restoring bot {saved.ProfileId} ({saved.Role}) failed: {e}");
                 }
             }
-            return $"{started}/{bots.Count} bots spawning" + (missing > 0 ? $", {missing} without a profile" : "") + (failed > 0 ? $", {failed} FAILED" : "");
+            return $"{started}/{bots.Count - pitSpawns} bots spawning" + (pitSpawns > 0 ? $" ({pitSpawns} more by Pit FireTeam)" : "") + (missing > 0 ? $", {missing} without a profile" : "") + (failed > 0 ? $", {failed} FAILED" : "");
         }
 
         private static BotsGroup GroupFor(BotSpawner spawner, BotOwner bot, BotZone zone, BotState saved,

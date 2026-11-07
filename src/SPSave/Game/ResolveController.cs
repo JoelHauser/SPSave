@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections;
 using System.Reflection;
 using Comfort.Common;
@@ -18,7 +19,7 @@ namespace SPSave.Game
     /// Killed: ActiveHealthController.Kill raises DiedEvent, which runs the player's death handling and
     /// BaseLocalGame.InitiateGameStopping (death panel, Stop(Killed, 5 s)), as any death does.
     /// MIA: Stop(MissingInAction), the call the raid timer makes when it runs out.
-    /// Takes the place of ReadyController: the world is not frozen, and the save is used up before the raid ends.
+    /// Takes the place of ReadyController: the save is used up before the raid ends.
     /// </summary>
     internal sealed class ResolveController : MonoBehaviour
     {
@@ -72,6 +73,22 @@ namespace SPSave.Game
             catch (Exception e)
             {
                 Plugin.Log.LogError("Using up the save failed: " + e);
+            }
+
+            // Pit FireTeam squadmates were not spawned for this ending (PitFireTeamCompat.PrepareResume): their outcome
+            // is the player's choice.
+            try
+            {
+                if (ResumeSession.State?.PitFollowers?.Any(f => f.Kind == PitFollowerState.Squadmate) == true)
+                {
+                    Plugin.Log.LogInfo(Plugin.PitTeammateFate.Value == TeammateFate.ShareYourFate
+                        ? PitFireTeamCompat.ReportSquadLost(ResumeSession.State, ResumeSession.Manifest?.ServerId)
+                        : "Pit FireTeam: squadmates come home safe (setting); their pre-raid state is kept.");
+                }
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogError("Settling the Pit FireTeam squad failed: " + e);
             }
 
             // playTime and the death panel's time count from SessionStartTime: include the time played before.

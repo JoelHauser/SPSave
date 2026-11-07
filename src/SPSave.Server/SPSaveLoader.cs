@@ -48,6 +48,11 @@ namespace SPSave.Server
                 patch.Enable();
             }
             Log($"Loaded: {patches.Length} lock patches.");
+            var pit = PitFireTeamLock.Enable();
+            if (pit != null)
+            {
+                Log(pit + ".");
+            }
             return Task.CompletedTask;
         }
     }

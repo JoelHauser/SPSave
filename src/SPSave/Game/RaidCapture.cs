@@ -109,6 +109,15 @@ namespace SPSave.Game
                 }
             }
             report.BotsAlive = state.Bots.Count;
+            // Pit FireTeam: which of those bots are the player's followers (refuses the save if it can't tell).
+            var pitWatch = Stopwatch.StartNew();
+            state.PitFollowers = PitFireTeamCompat.Capture(player);
+            var pit = PitFireTeamCompat.Describe(state.PitFollowers);
+            if (pit != null)
+            {
+                Plugin.Log.LogInfo(pit + (state.PitFollowers.Count > 0 ? ": " + string.Join(", ", state.PitFollowers.Select(f => $"{f.Nickname} ({f.Kind})")) : "") +
+                                   $" ({pitWatch.Elapsed.TotalMilliseconds:F0} ms).");
+            }
             var verdict = CombatRule.Evaluate(awareness, combatWindowSeconds);
             state.Combat = new CombatState { WindowSeconds = combatWindowSeconds, InCombat = verdict.InCombat, Detail = verdict.Describe() };
             report.InCombat = verdict.InCombat;

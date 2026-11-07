@@ -210,6 +210,33 @@ the **server** too. The server console should show `[SPSave] Loaded: 8 lock patc
 Send back: the SPSave lines from `BepInEx\LogOutput.log`, the `[SPSave]` lines from the server console or
 `SPT_Runtime\user\logs\spt\`, and anything that looked off, especially anything that didn't look like stock EFT.
 
+## P1. Pit FireTeam squad (0.9.0 client, 0.8.0 server)
+
+Restart the **server** (new server mod). Factory, one saved teammate in your group (My Squad → Invite, or Auto Join).
+
+1. Start the raid. SPSave's log at startup: `Pit FireTeam 1.1.1 found`. Server console: `Pit FireTeam found: 9
+   teammate actions locked`.
+2. Out of combat, Escape → SAVE & QUIT. Log: `Pit FireTeam: 1 squadmate: <name> (squadmate)`.
+3. Before resuming, open My Squad and try to change that teammate's loadout: refused (server: `Refused Pit FireTeam
+   SetLoadout`).
+4. RECONNECT. Expected: **one** copy of your teammate next to you, following you and answering commands, with the gear
+   and health it had. Log: `Pit FireTeam squad for this resume: carried back <name>`.
+5. Extract together. Pit FireTeam's own raid report shows the teammate once; no item turns up twice.
+6. Optional, second run: save with the teammate, then LEAVE → Yes. Log: `1 squadmate(s) reported lost`. With the F12
+   setting on `ComeHomeSafe` instead: `squadmates come home safe`.
+7. Optional: recruit a friendly bot (Allegiance), save, resume: `recruit back as your follower`.
+
+## D2. Straight back in, no hotkeys, old saves pruned (0.8.5)
+
+Ctrl+F10 and Ctrl+F11 are gone from 0.8.5 on (sections above are history): save from the pause menu's SAVE & QUIT;
+a resume needs no key. One short Factory run, server unchanged:
+
+1. Escape, SAVE & QUIT (out of combat). The game closes.
+2. Start, RECONNECT. Expected: control from the moment the loading screen fades, as in a normal raid start: no
+   window, arms in the normal pose for what you hold, no pause after the fade, facing the way you were (0.8.6).
+3. `H:\SPT4.1.X\SPSave\saves\<profile>\used\` holds 3 folders afterwards (was 37+).
+4. Optional: the combat save's reconnect screen shows the "Attention" message and only LEAVE (0.8.2, not yet seen).
+
 ## D1. Pause menu, Ready prompt, mod check (0.8.0)
 
 Short Factory runs. Server mod unchanged (0.7.1).

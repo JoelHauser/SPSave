@@ -327,4 +327,26 @@ namespace SPSave.Game
             }
         }
     }
+
+    /// <summary>
+    /// Pit FireTeam fills its spawn lists from the pre-raid group in its own postfix on SendRaidSettings, which
+    /// TarkovApplication.LocalGameCreate calls for every local raid that isn't a transit. On a resume this runs after
+    /// it (Priority.Last) and puts the saved squad there instead (PitFireTeamCompat.PrepareResume), before the player
+    /// is activated (Pit FireTeam prefetches its squad's profiles then).
+    /// </summary>
+    internal sealed class PitSquadPatch : ModulePatch
+    {
+        protected override MethodBase GetTargetMethod() => AccessTools.Method(typeof(EftClientBackendSession), nameof(EftClientBackendSession.SendRaidSettings));
+
+        [PatchPostfix]
+        [HarmonyPriority(Priority.Last)]
+        private static void Postfix()
+        {
+            if (ResumeSession.Phase != ResumePhase.Loading || ResumeSession.State == null || !PitFireTeamCompat.Loaded)
+            {
+                return;
+            }
+            PitFireTeamCompat.PrepareResume(ResumeSession.State, ending: ResumeSession.Outcome != null);
+        }
+    }
 }

@@ -142,6 +142,39 @@ namespace SPSave.Tests
             Assert.True(SnapshotFile.Retire(path, DateTime.UtcNow) == null, "second retire finds nothing");
         }
 
+        public static void RetireKeepsOnlyTheNewestUsedSaves()
+        {
+            using var dir = new TempDir();
+            var path = dir.File("raid.spsave");
+            var used = dir.File("used");
+            // Someone's own folder in used\ is not ours to delete.
+            Directory.CreateDirectory(Path.Combine(used, "keep me"));
+            for (var minute = 0; minute < 6; minute++)
+            {
+                SnapshotFile.Write(path, Sections("save " + minute));
+                SnapshotFile.Retire(path, new DateTime(2026, 11, 6, 17, minute, 0, DateTimeKind.Utc));
+            }
+            var left = Directory.GetDirectories(used).Select(Path.GetFileName).OrderBy(n => n).ToList();
+            Assert.Equal(SnapshotFile.UsedSavesKept + 1, left.Count, "newest kept plus the foreign folder");
+            Assert.True(left.Contains("20261106-170500") && left.Contains("20261106-170300"), "newest stay");
+            Assert.True(!left.Contains("20261106-170200"), "older ones go");
+            Assert.True(left.Contains("keep me"), "foreign folder untouched");
+        }
+
+        public static void RetireTwiceInOneSecondKeepsBoth()
+        {
+            using var dir = new TempDir();
+            var path = dir.File("raid.spsave");
+            var stamp = new DateTime(2026, 11, 7, 5, 11, 44, DateTimeKind.Utc);
+            SnapshotFile.Write(path, Sections("first"));
+            var first = SnapshotFile.Retire(path, stamp);
+            SnapshotFile.Write(path, Sections("second"));
+            var second = SnapshotFile.Retire(path, stamp);
+            Assert.True(first != null && second != null && first != second, "two folders");
+            Assert.True(Tag(SnapshotFile.Read(Path.Combine(first, "raid.spsave"))).Contains("first"), "first kept");
+            Assert.True(Tag(SnapshotFile.Read(Path.Combine(second, "raid.spsave"))).Contains("second"), "second kept");
+        }
+
         public static void FailedWriteLeavesCurrentSaveAlone()
         {
             using var dir = new TempDir();

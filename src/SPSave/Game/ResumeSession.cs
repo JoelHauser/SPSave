@@ -19,9 +19,9 @@ namespace SPSave.Game
         None,
         /// <summary>From the raid start to the moment the game starts: the hooks substitute saved state.</summary>
         Loading,
-        /// <summary>Game started, world restored and frozen until the player takes control.</summary>
-        WaitingForReady,
-        /// <summary>Game started; the raid is being ended as Killed or MIA (ResolveController). Not frozen.</summary>
+        /// <summary>Game started, world restored; ReadyController finishes the resume once the loading fade is gone.</summary>
+        Finishing,
+        /// <summary>Game started; the raid is being ended as Killed or MIA (ResolveController).</summary>
         Resolving,
         /// <summary>The player took control, or the resolve ended the raid; the save is used up.</summary>
         Live
@@ -72,7 +72,7 @@ namespace SPSave.Game
         private static readonly Dictionary<Item, bool> FoundInRaid = new Dictionary<Item, bool>();
 
         internal static bool Loading => Phase == ResumePhase.Loading;
-        internal static bool Active => Phase == ResumePhase.Loading || Phase == ResumePhase.WaitingForReady || Phase == ResumePhase.Resolving;
+        internal static bool Active => Phase == ResumePhase.Loading || Phase == ResumePhase.Finishing || Phase == ResumePhase.Resolving;
 
         internal static void TryBegin(TarkovApplication app)
         {

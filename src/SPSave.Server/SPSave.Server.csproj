@@ -7,7 +7,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>SPSave.Server</AssemblyName>
     <RootNamespace>SPSave.Server</RootNamespace>
-    <Version>0.7.1</Version>
+    <Version>0.8.0</Version>
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>latest</LangVersion>

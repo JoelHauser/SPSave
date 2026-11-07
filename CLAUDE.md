@@ -150,6 +150,34 @@ Then D (pause-menu button, Ready to Resume prompt, version and mod-list checks, 
   `_disconnectButton` (LEAVE) with our label (`DefaultUIButton.SetRawText`), above it, shown only in the in-raid layout
   and not while frozen or ending. While frozen before Ready, LEAVE is hidden: it would send `local/end` (Left) with
   the saved profile though the save isn't used up yet.
+- **0.8.0 in game 2026-11-06:** the clone sat exactly on LEAVE (labels overlapped; the parent doesn't stack its children,
+  so sibling order does nothing). **0.8.1:** SAVE & QUIT goes one stock step (LEAVE→RESUME distance, world space) below
+  LEAVE, where RESUME (`_hideScreenButton`) was, and RESUME moves down one step (put back when the button hides).
+  LEAVE stays put; there is no room above it. Logs "Pause menu layout:" once (parents, layout groups, sizes).
+- **Trap (0.8.2):** `ItemUiContext.ShowMessageWindow` in a raid (`InGameStatus.InRaid`) skips the window and runs the
+  accept action at once unless `forceShow: true`. 0.8.0/0.8.1 saved in combat without asking and accepted Ready
+  unseen. Every in-raid dialog passes `forceShow`; the combat question now has a No (logged).
+- 0.8.2: a combat save's reconnect screen opens EFT's message window (caption `"Attention".Localized()`, OK only):
+  "You quit this raid during combat, so you were killed. The gear you took in is lost." (Joel asked for it.)
+- **0.8.2 in game 2026-11-06:** combat question shown, No logged, raid went on. READY window shown but no cursor (Y/N
+  keys worked) and the mouse turned the camera upside down while frozen. **0.8.3:** the window raises the game's
+  `ToggleShowInGameCursorEvent` (as `LighthouseKeeperZone`; a `DialogWindow`'s `ShouldLockCursor` is Ignore), off on
+  Ready; `Freeze` also skips `GamePlayerOwner.TranslateAxes` (`DialogWindow.TranslateAxes` passes the mouse on).
+  Text now "Ready to continue?" (the window has YES/NO).
+- **0.8.3 in game:** cursor showed but no click or hover; character faced the wrong way. In a raid `BattleUIScreen`
+  calls `UIEventSystem.Instance.Disable()`. **0.8.4:** `UIEventSystem.Instance.SetTemporaryStatus(true)` while the
+  window is up (the console's override), off on Ready. Saved look is re-applied after the unfreeze; "Look direction"
+  lines log it at freeze and at Ready (saved / was / now) to find what turns it.
+- **0.8.5 (Joel, 2026-11-06): no Ready window at all.** `ReadyController` holds the raid (Freeze) only until
+  PreloaderUI's black overlay is gone, then runs Ready itself a frame later. No `Time.timeScale`, cursor or pointer
+  override. Ctrl+F10 and Ctrl+F11 removed (config entries too): no per-frame code in normal play. Look direction is
+  re-applied after the unfreeze and logged. `SnapshotFile.Retire` now prunes `used\` to the newest
+  `UsedSavesKept` (3) stamped folders; other folders there are left alone.
+- **0.8.5 in game 2026-11-06:** straight back in, look direction logged identical (saved = at freeze = at Ready), so
+  the earlier "wrong way" was only the frozen camera. But Joel: arms held out as if holding a weapon, then about a
+  second without control: `Freeze` disabled the player for the whole fade (4 s), so it never animated. **0.8.6:**
+  `Freeze` deleted; nothing is held during the fade (as a normal raid start). `ReadyController` still waits for the
+  overlay, then uses up the save, unlocks and shifts the timer/panels by the fade time (same maths as tested).
 - Combat save: from the button, a stock confirmation, then the manifest gets `ResolveAs = "Killed"`. Combat is judged
   again after the answer. Ctrl+F10 stays as a fallback until the button is confirmed (then it and its per-frame key
   check go); it still refuses in combat.
@@ -167,9 +195,7 @@ nothing is merged to main after B1. Test zips in `dist/` (ignored by git): lates
 1. **D1 in game** (0.8.0, TEST-PLAN.md D1, Factory): SAVE & QUIT button (looks like LEAVE, saves and closes), the
    stock Ready window (cursor shows, its button works with time stopped), no LEAVE while frozen, a combat save
    (confirmation, then Leave-only and Killed), optionally the mod check. Fix what it finds.
-2. **Drop the hotkeys** once the button and the Ready window are confirmed: remove Ctrl+F10 and its per-frame key
-   check (Rules: it was the only per-frame code), and Ctrl+F11 unless the window needs a fallback. Update config
-   descriptions, TEST-PLAN and DESIGN.
+2. **Done in 0.8.5:** hotkeys dropped, Ready window dropped, used saves pruned (TEST-PLAN D2, not yet run).
 3. **Other maps.** Only Factory has been resumed so far. One short Customs run first: weather restore (never run in
    game: Factory has none; Forecaster installed), day/night time variant from the menu, and a real boss with followers
    (Reshala) if one is near. Then, as Joel has time: Interchange (power switch, Killa), Reserve (D2 lever), Labs
@@ -184,6 +210,44 @@ nothing is merged to main after B1. Test zips in `dist/` (ignored by git): lates
    restart the server, what comes back and what doesn't), version 1.0.0 in both csprojs, `Plugin.Version` and the
    server `ModMetadata`, a license (none yet; the server metadata says "All rights reserved" until Joel picks one),
    release zip per Rules, GitHub release. Never call it release-ready before those checks.
+
+**Pit FireTeam compatibility (Joel, 2026-11-06: required).** Pit FireTeam 1.1.1 installed in `H:\SPT4.1.X`.
+Step 1 (API check) done: docs/PITFIRETEAM-COMPAT.md. Steps 2–5 built 2026-11-07 (client 0.9.0, server 0.8.0),
+every reflected member checked against the installed DLLs; not yet run in game (TEST-PLAN P1).
+0.9.0 save with squadmate barness passed (log); 1.3 s save hitch from `AccessTools.TypeByName` → 0.9.1 looks types up
+in Pit FireTeam's own assembly at raid start. 0.9.1 resume: "carried back barness", 8 bots + 1 by Pit FireTeam, no
+errors (Pit FireTeam logs Info only in debug builds). Pause menu with Pit FireTeam: RESUME showed back under SAVE &
+QUIT, SQUAD SETTINGS (Pit's `pitFireTeam_RaidSettingsButton`, RESUME anchored − (height + 5)) below; nothing in the
+game or Pit FireTeam was found moving RESUME. 0.9.2: `Arrange` also keeps Pit's button under RESUME; `LayoutKeeper`
+rechecks a frame and 0.3 s after opening and logs "something moved the buttons". The loadout-refusal check can't be
+done from the client: My Squad isn't reachable from the reconnect screen (server lock is the backstop).
+0.9.3 (review, built, not deployed while Joel tested 0.9.2): SAVE & QUIT hidden and refused in Scav raids
+(`CaptureController.ScavRaid`: a resume rebuilds PMC raids only); two retires in one second no longer collide
+(`used\<stamp>-2`, test `RetireTwiceInOneSecondKeepsBoth`); Abandon/Killed doesn't report the squad when Pit FireTeam
+is gone; `ResumePhase.WaitingForReady` renamed `Finishing`, stale freeze/Ready wording removed; `LockStatus`
+properties (no warnings left). 0.9.2 in game: menu order right (DISCONNECT, SAVE & QUIT, RESUME, SQUAD SETTINGS) but
+gaps 140/140/80; save hitch fixed (bots 245 ms, was 955). 0.9.3 also spaces the four rows evenly when Pit FireTeam's
+button is there (step halfway between stock and Pit's; `PauseMenuButtonPatch.Targets`). Installed 2026-11-07.
+0.9.4: Pit FireTeam spawns the carried squad in `LocalGame.vmethod_1` (SpawnAction) next to the player's *fresh*
+spawn point, before vmethod_6 moves the player; `PitFireTeamCompat.SquadPlacer` moves each to its saved spot once
+registered (Pit's own teleport calls). Open bug (2026-11-07): after save → RECONNECT (with a Pit teammate) → extract,
+the main menu came back in the stock top-left layout instead of Menu Overhaul's. A normal raid without a teammate
+was fine. Not the menu environment (same "EnvironmentUISceneFactory not found" warnings in the good run). Suspect:
+Pit FireTeam's `CaptureOriginalButtonPositions`/`RestoreOriginalButtonPositions` vs Menu Overhaul's button layout
+order. 0.9.5 adds `MenuDiagnosticsPatch` (logs main-menu button positions and Overhaul's in-game flag after each
+MenuScreen.Show; remove once the cause is known).
+Cause found (0.9.5 log, 2026-11-07): the reconnect-mode menu (`MainMenuReconnectScreenController`) is not laid out by
+Menu Overhaul (stock anchors 0.0, x 0), and Pit FireTeam's `SquadControlMenuUi.EnsureSquadButton` records each
+button's position the first time it sees the MenuScreen (`originalButtonPositions`) and restores it on every Show.
+After the resumed raid Menu Overhaul set its anchors (0.5) and Pit FireTeam put the stock positions back. A normal
+raid, with or without the pause menu, was fine. 0.9.6 `MenuPositionsPatch` (prefix on `MenuScreen.Show(controller)`)
+clears that record before a `MainMenuScreenController` Show when Menu Overhaul is loaded
+(`PitFireTeamCompat.ForgetMenuPositions`). `_reconnectAvailable` can't be used: it is set in ShowAction, after Show.
+**0.9.6 passed in game 2026-11-07** (Factory, Pit FireTeam + Menu Overhaul): save → RECONNECT → extract; teammate
+"sasda" carried back and placed at its saved spot (97 m from Pit's spawn); menu record cleared, Menu Overhaul layout
+after the raid; no errors. 0.9.7 removes the diagnostic (`MenuDiagnosticsPatch`); the fix is `Game/MenuPositionsPatch.cs`. Plan: resume saved squadmates through its transit path
+(`FollowerTransitStateCache`, `spawnMemberIds`, `RaidTransit`, all internal: reflection), lock its teammate/gear routes
+while a save waits, report teammate outcomes for Abandon/Killed. Open: recruits, Abandon/Killed for teammates.
 
 ## How the resume hooks in (B1)
 
@@ -215,6 +279,8 @@ Target install: `H:\SPT4.1.X` (SPT 4.1.6, EFT 0.16.9.40743). Repo https://github
 - A combat save's reconnect screen shows only LEAVE (ends as Killed). Abandon's question: "Abandon this raid? You will
   be listed as Missing in Action and lose the gear you took in."
 - A Killed/MIA ending never shows the raid: the screen stays black from load to results.
+- Killed/MIA keeps the stock results screens and the trip back to the menu, like a real death (Joel, 2026-11-06,
+  asked about skipping them or the load; chose to keep both).
 
 ## Layout
 
@@ -292,7 +358,7 @@ Decompile with `ilspycmd` (global tool) when a new API is needed; never guess me
 ## Rules
 
 - Capture is read-only. A failed save must leave the raid exactly as it was.
-- Nothing per frame in normal play. Step A's hotkey check is the only exception and goes away with the menu button.
+- Nothing per frame in normal play (the Step A hotkey check went in 0.8.5).
   Anything that has to be recorded during play needs a reason here (currently: weather nodes, once per raid; the
   `Time.time` each wave scenario ran at, once per raid, because wave timers count from it and the game keeps no copy).
 - Release zips hold `BepInEx/plugins/SPSave.dll` and `SPT_Runtime/user/mods/SPSave/SPSave.Server.dll` (this install's

@@ -20,8 +20,9 @@ dying applies normal SPT progression once.
 "In combat": a living bot sees you now, or saw or shot at you within 30 s (configurable). A bot that only knows
 about you (heard you, was told) does not count. Checked once, at save time.
 
-A save is used up when you press **Ready to Resume**. Until then, a failed resume returns to the menu with the save
-intact.
+A save is used up when the resumed raid hands you control, as soon as the loading screen fades (no Ready prompt:
+Joel, 2026-11-06). Until then, a failed resume returns to the menu with the save intact. The three newest used-up
+saves are kept in `used\` for troubleshooting; older ones are deleted.
 
 ## What comes back
 
@@ -45,7 +46,7 @@ Resume or Abandon. Without the lock, kit could be sold and then resumed: duplica
 
 **Resume.** The normal raid start, with the saved profile, the saved world in place of fresh loot, the saved spawn
 point, clock, time of day and weather, the opening waves suppressed and the living bots spawned from their saved
-profiles. The world stays frozen until Ready to Resume.
+profiles. The world is held only while the loading screen fades, then you have control.
 
 **End.** The normal `local/end` with the profile carried through every session, applied once.
 
@@ -66,5 +67,6 @@ profile at `/client/match/local/end`, and the client only sends that from `GameE
 - **C. Server mod and lock.** The server locks the profile while a save waits; the menu is EFT's own reconnect mode
   (RECONNECT resumes, LEAVE abandons as MIA); Abandon and Killed end the raid behind a black screen. Done on Factory
   (2026-11-07).
-- **D. Pause-menu button, Ready to Resume prompt**, version and mod-list checks on resume. Built (0.8.0), not yet
-  tested in game. Then other maps, then release.
+- **D. Pause-menu SAVE & QUIT**, version and mod-list checks on resume. The Ready prompt was built (0.8.0–0.8.4) and
+  dropped (0.8.5): the resume hands over control when loading ends. Hotkeys removed. Button, combat question and
+  layout passed in game; 0.8.5 not yet. Then other maps, then release.
