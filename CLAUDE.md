@@ -237,7 +237,7 @@ and `main` are the same. Release zip: `dist/SPSave-1.0.0.zip` (dist/ is ignored 
    come back (DESIGN.md).
 4. **Merge** `c-server` into main when Joel says; commit and push each later step when he asks.
 5. **Release: done 1.0.0 (Joel, 2026-11-07).** For later releases: bump the version in both csprojs, `Plugin.Version` and the
-   server `ModMetadata`; README and mod page (`docs/MOD-DESCRIPTION.md`, rewritten 2026-11-07 as the 1.0.0 page);
+   server `ModMetadata`; README and mod page (`docs/MOD-DESCRIPTION.md`, the 1.0.0 page; plain Markdown only: Forge shows `{.is-warning}` and `<kbd>` as text);
    release zip per Rules (build it with .NET ZipFile: PS 5.1 Compress-Archive writes backslash paths); GitHub
    release. Never call a release ready before Joel's checks with his usual mods.
 
@@ -289,7 +289,8 @@ Target install: `H:\SPT4.1.X` (SPT 4.1.6, EFT 0.16.9.40743). Repo https://github
 - `src/SPSave.Server`: the server mod (net10.0): the profile lock while a save waits (`PitFireTeamLock` for Pit
   FireTeam's teammate actions).
 - docs: DESIGN.md (player promises), TEST-PLAN.md (in-game checks per step, latest first), PITFIRETEAM-COMPAT.md,
-  MOD-DESCRIPTION.md (draft mod page), C-SERVER-API.md, C3-PLAN.md, B2-COMPAT.md, STEP-A-RESULTS.md.
+  MOD-DESCRIPTION.md (Forge page), FIKA-COMPAT.md (Fika solo: findings and plan, not built), C-SERVER-API.md,
+  C3-PLAN.md, B2-COMPAT.md, STEP-A-RESULTS.md.
 
 ## Build
 

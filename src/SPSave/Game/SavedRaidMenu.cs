@@ -102,7 +102,7 @@ namespace SPSave.Game
             {
                 Plugin.Log.LogWarning($"Save was made on game {manifest.GameVersion}; this is {gameVersion}: it can only be discarded.");
             }
-            var mods = ModListCheck.Compare(manifest.Plugins, CurrentPlugins(), new[] { Plugin.Guid });
+            var mods = ModListCheck.Compare(manifest.Plugins, CurrentPlugins(), new[] { Plugin.Guid, Plugin.OldGuid });
             if (mods.NeedsConfirmation || mods.Added.Count > 0)
             {
                 Plugin.Log.LogInfo($"Mods since the save: {mods.Missing.Count} missing, {mods.Changed.Count} changed, {mods.Added.Count} added. " +

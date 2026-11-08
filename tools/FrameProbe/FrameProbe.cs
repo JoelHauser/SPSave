@@ -19,7 +19,7 @@ namespace SPSave.FrameProbe
     /// allocated before recording starts, and writes them when the raid ends. Install it for both the SPSave-on and
     /// SPSave-off runs so its own cost is the same on each side; each summary row says whether SPSave was loaded.
     /// </summary>
-    [BepInPlugin("com.joelhauser.spsave.frameprobe", "SPSave FrameProbe", "0.1.0")]
+    [BepInPlugin("com.mybutthasarash.spsave.frameprobe", "SPSave FrameProbe", "0.1.0")]
     public sealed class FrameProbePlugin : BaseUnityPlugin
     {
         internal static ManualLogSource Log;
@@ -33,7 +33,7 @@ namespace SPSave.FrameProbe
             WarmupSeconds = Config.Bind("Probe", "Warm-up (seconds)", 30f, "Frames in the first seconds of a raid are not recorded.");
             MaxFrames = Config.Bind("Probe", "Max frames", 600_000, "About an hour at 165 fps. Recording stops when full.");
             RunLabel = Config.Bind("Probe", "Run label", "", "Free text written into each summary row, e.g. the route you played.");
-            new Harmony("com.joelhauser.spsave.frameprobe").Patch(
+            new Harmony("com.mybutthasarash.spsave.frameprobe").Patch(
                 AccessTools.Method(typeof(GameWorld), nameof(GameWorld.OnGameStarted)),
                 postfix: new HarmonyMethod(typeof(FrameProbePlugin), nameof(OnGameStartedPostfix)));
         }
@@ -97,7 +97,7 @@ namespace SPSave.FrameProbe
         private void Write()
         {
             var c = CultureInfo.InvariantCulture;
-            var spsave = Chainloader.PluginInfos.ContainsKey("com.joelhauser.spsave");
+            var spsave = Chainloader.PluginInfos.ContainsKey("com.mybutthasarash.spsave");
             var root = Path.Combine(BepInEx.Paths.GameRootPath, "SPSave", "frameprobe");
             Directory.CreateDirectory(root);
             var stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", c);

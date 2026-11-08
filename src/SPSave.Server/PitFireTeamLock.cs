@@ -33,7 +33,7 @@ namespace SPSave.Server
             {
                 return null;
             }
-            var harmony = new Harmony("com.joelhauser.spsave.server.pitfireteam");
+            var harmony = new Harmony("com.mybutthasarash.spsave.pitfireteam");
             var prefix = new HarmonyMethod(typeof(PitFireTeamLock), nameof(Prefix));
             var patched = new List<string>();
             var missing = new List<string>();

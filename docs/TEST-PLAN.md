@@ -119,7 +119,7 @@ dotnet build src\SPSave -c Release -p:SPTPath="H:\SPT4.1.X" -p:DeployToSPT=true
 dotnet build tools\FrameProbe -c Release -p:SPTPath="H:\SPT4.1.X" -p:DeployToSPT=true
 ```
 
-Capture key: **Ctrl+F10** (BepInEx config `com.joelhauser.spsave.cfg`). Output goes to `H:\SPT4.1.X\SPSave\`:
+Capture key: **Ctrl+F10** (BepInEx config `com.mybutthasarash.spsave.cfg`). Output goes to `H:\SPT4.1.X\SPSave\`:
 `saves\<profile id>\raid.spsave`, `captures.csv`, and `frameprobe\`.
 
 To look inside a save:

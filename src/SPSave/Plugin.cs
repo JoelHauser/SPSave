@@ -23,7 +23,10 @@ namespace SPSave
     [BepInDependency("com.chazut.orbit", BepInDependency.DependencyFlags.SoftDependency)]
     public sealed class Plugin : BaseUnityPlugin
     {
-        public const string Guid = "com.joelhauser.spsave";
+        public const string Guid = "com.mybutthasarash.spsave";
+
+        /// <summary>The GUID of the first 1.0.0 build; saves made with it list it among their plugins.</summary>
+        public const string OldGuid = "com.joelhauser.spsave";
         public const string Version = "1.0.0";
 
         internal static ManualLogSource Log;

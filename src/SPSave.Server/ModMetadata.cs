@@ -7,7 +7,7 @@ namespace SPSave.Server
     /// <summary>The one IModMetadata the server needs (as ABPS declares it).</summary>
     public record ModMetadata : IModMetadata
     {
-        public string ModGuid { get; init; } = "com.joelhauser.spsave.server";
+        public string ModGuid { get; init; } = "com.mybutthasarash.spsave";
         public string Name { get; init; } = "SPSave";
         public string Author { get; init; } = "Joel Hauser";
         public List<string> Contributors { get; init; }
