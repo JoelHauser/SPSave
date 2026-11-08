@@ -31,11 +31,9 @@ namespace SPSave
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<float> CombatWindowSeconds;
-        internal static ConfigEntry<bool> VerifyRoundTrip;
-        internal static ConfigEntry<bool> ResumeEnabled;
         internal static ConfigEntry<TeammateFate> PitTeammateFate;
 
-        /// <summary>&lt;game root&gt;\SPSave: saves\&lt;profile id&gt;\raid.spsave and captures.csv.</summary>
+        /// <summary>&lt;game root&gt;\SPSave: saves\&lt;profile id&gt;\raid.spsave, with used-up saves under used\.</summary>
         internal static string SaveRoot => Path.Combine(BepInEx.Paths.GameRootPath, "SPSave");
 
         internal static string SavePath(string profileId) => Path.Combine(SaveRoot, "saves", profileId, "raid.spsave");
@@ -43,44 +41,48 @@ namespace SPSave
         private void Awake()
         {
             Log = Logger;
-            CombatWindowSeconds = Config.Bind("Step A", "Combat window (seconds)", 30f,
-                "A bot that saw or shot at you within this many seconds, or sees you now, means you are in combat.");
-            VerifyRoundTrip = Config.Bind("Step A", "Verify round trip", true,
-                "After writing, read the save back and check it decodes into what was captured.");
-
+            CombatWindowSeconds = Config.Bind("Saving", "Combat window (seconds)", 30f,
+                "A bot that saw or shot at you within this many seconds, or sees you now, means you are in combat: " +
+                "saving then counts as dying.");
             PitTeammateFate = Config.Bind("Pit FireTeam", "Teammates when a saved raid is abandoned or killed", TeammateFate.ShareYourFate,
                 "Abandoning a saved raid (MIA) or a save made in combat (Killed): ShareYourFate reports your saved squadmates " +
                 "lost, as Pit FireTeam does for fallen teammates; ComeHomeSafe leaves them as they were before the raid.");
-            ResumeEnabled = Config.Bind("Step B", "Resume saved raids", true,
-                "Starting a PMC raid on the map of your save resumes it instead of starting fresh.");
 
+            // Recorded once per raid, for the save (weather nodes, wave scenario start times).
             new RaidStartPatch().Enable();
             new WeatherNodesPatch().Enable();
             new BossRunPatch().Enable();
             new OldWavesRunPatch().Enable();
-            new LocalGameCreatePatch().Enable();
 
-            new MainMenuPatch().Enable();
+            // Menus: SAVE & QUIT in the pause menu, the reconnect-mode main menu, menu fixes for other mods.
             new PauseMenuButtonPatch().Enable();
+            new MainMenuPatch().Enable();
             new MenuPositionsPatch().Enable();
-            new ZombieMidSessionPatch().Enable();
+
+            // Resume: the saved profile, world, waves and bots go in while the raid loads.
             new LocalGameMatchingPatch().Enable();
-            new PitSquadPatch().Enable();
             new PrefabPathsPatch().Enable();
+            new LocalGameCreatePatch().Enable();
+            new PitSquadPatch().Enable();
             new GameTimerStartPatch().Enable();
             new WaveSpawnGatePatch().Enable();
             new BossSpawnGatePatch().Enable();
             new FreeSpawnGatePatch().Enable();
-            SainCompat.Enable();
             new SpawnLootPatch().Enable();
             new WorldSpawnLootPatch().Enable();
             new SpawnedInSessionPatch().Enable();
             new KeycardPatch().Enable();
             new GameStartPatch().Enable();
-            ResolveBlackout.Enable();
+            new ZombieMidSessionPatch().Enable();
+            SainCompat.Enable();
+
+            // Progress carried over from earlier sessions of the raid.
             new BeginStatisticsSessionPatch().Enable();
             new TransitContinuePatch().Enable();
             new ManageGameQuestsPatch().Enable();
+
+            // Raid end: a Killed/MIA ending behind a black screen, and a normal end discarding its save.
+            ResolveBlackout.Enable();
             new RaidEndPatch().Enable();
         }
     }

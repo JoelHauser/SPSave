@@ -183,7 +183,11 @@ every member checked against the installed DLLs; a missing member refuses saves 
   behaviour to pitAlex (it keeps whatever layout it sees first).
 
 Repo: **1.0.0 released 2026-11-07** (GitHub release v1.0.0, MIT): `c-server` merged into `main`, tagged `v1.0.0`; `c-server`
-and `main` are the same. Release zip: `dist/SPSave-1.0.0.zip` (dist/ is ignored by git).
+and `main` are the same. Release zip: `dist/SPSave-1.0.0.zip` (dist/ is ignored by git). GUID (client and server):
+`com.mybutthasarash.spsave`; the first 1.0.0 build used `com.joelhauser.spsave` (`Plugin.OldGuid`, ignored by the mod check).
+Cleanup after release (2026-11-07): F12 has two settings, `Saving` → combat window and `Pit FireTeam` → teammates;
+the "Resume saved raids" and "Verify round trip" switches are gone (the round trip always runs), `captures.csv`
+is no longer written (the "Captured …" log line keeps the numbers), `RaidCapture.Binary` and `tools/FrameProbe` removed.
 
 ## Upcoming steps (as of 2026-11-07, in order; 1.0.0 installed)
 
@@ -284,7 +288,7 @@ Target install: `H:\SPT4.1.X` (SPT 4.1.6, EFT 0.16.9.40743). Repo https://github
   (`ResolveController`, `ResolveBlackout`), the locked menu (`SavedRaidMenu`), server calls (`LockClient`), SAIN/ABPS
   compatibility, Pit FireTeam (`PitFireTeamCompat`, `MenuPositionsPatch` for its clash with Menu Overhaul).
 - `tests/SPSave.Tests`: plain .NET, `dotnet run -c Release`.
-- `tools/FrameProbe`: separate measurement plugin for the on/off comparison. Not shipped.
+- (`tools/FrameProbe`, the Step A frame-time plugin, was removed in the 1.0.0 cleanup; see git history.)
 - `tools/SaveDump`: validates a save and extracts its sections.
 - `src/SPSave.Server`: the server mod (net10.0): the profile lock while a save waits (`PitFireTeamLock` for Pit
   FireTeam's teammate actions).

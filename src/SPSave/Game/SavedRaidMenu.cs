@@ -42,7 +42,7 @@ namespace SPSave.Game
         /// </summary>
         internal static Manifest WaitingSave(Profile profile)
         {
-            if (profile == null || !Plugin.ResumeEnabled.Value)
+            if (profile == null)
             {
                 return null;
             }

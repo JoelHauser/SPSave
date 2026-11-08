@@ -79,10 +79,6 @@ namespace SPSave.Game
             var requested = Requested;
             Requested = null;
             Reset();
-            if (!Plugin.ResumeEnabled.Value)
-            {
-                return;
-            }
             try
             {
                 Begin(app, requested);

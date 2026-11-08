@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Diagnostics;
-using System.IO;
 using EFT;
 using EFT.Communications;
 using EFT.UI;
@@ -110,21 +109,13 @@ namespace SPSave.Game
                 report.WriteMs = write.WriteMs + write.ReplaceMs;
                 report.VerifyFileMs = write.VerifyMs;
 
-                if (Plugin.VerifyRoundTrip.Value)
-                {
-                    var watch = Stopwatch.StartNew();
-                    var check = RoundTrip.Verify(SnapshotFile.Read(path), result.WorldItemIds, result.WorldItems, report.Corpses);
-                    report.RoundTripMs = watch.Elapsed.TotalMilliseconds;
-                    report.RoundTripOk = check.Ok;
-                    report.RoundTripDetail = check.Detail;
-                }
-                else
-                {
-                    report.RoundTripOk = true;
-                    report.RoundTripDetail = "skipped";
-                }
+                // Read the save back: one that doesn't decode into what was captured is never kept.
+                var watch = Stopwatch.StartNew();
+                var check = RoundTrip.Verify(SnapshotFile.Read(path), result.WorldItemIds, result.WorldItems, report.Corpses);
+                report.RoundTripMs = watch.Elapsed.TotalMilliseconds;
+                report.RoundTripOk = check.Ok;
+                report.RoundTripDetail = check.Detail;
                 report.FrameMs = frame.Elapsed.TotalMilliseconds;
-                CaptureReport.AppendTo(Path.Combine(Plugin.SaveRoot, "captures.csv"), report);
                 Plugin.Log.LogInfo("Captured " + report.Summary());
 
                 if (!report.RoundTripOk)

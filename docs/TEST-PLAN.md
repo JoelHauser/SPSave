@@ -109,6 +109,9 @@ used up when you press Ctrl+F11.
 
 # Step A: in-game checks
 
+> Historical (done 2026-11-06). The FrameProbe tool, the `captures.csv` log and the Ctrl+F10 hotkey used here were removed
+> by 1.0.0; they are in the git history. The "Captured …" line in the BepInEx log still has the save timings.
+
 Step A captures a raid to disk and reads it back. It restores nothing and never ends the raid, so a raid with
 captures in it must play and extract exactly like one without.
 

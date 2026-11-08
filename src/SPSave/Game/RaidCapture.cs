@@ -7,14 +7,12 @@ using BepInEx;
 using BepInEx.Bootstrap;
 using Comfort.Common;
 using EFT;
-using EFT.BinarySerialization;
 using EFT.HealthSystem;
 using EFT.Interactive;
 using EFT.InventoryLogic;
 using EFT.Weather;
 using HarmonyLib;
 using JsonType;
-using Mirror;
 using Newtonsoft.Json;
 using SPSave.Core;
 using UnityEngine;
@@ -244,13 +242,6 @@ namespace SPSave.Game
         internal static int CountFoundInRaid(Profile profile)
         {
             return profile.Inventory.GetPlayerItems(EPlayerItems.All).Where(i => i.SpawnedInSession).Select(i => i.Id).Distinct().Count();
-        }
-
-        internal static byte[] Binary(Action<NetworkWriter> write)
-        {
-            var writer = new NetworkWriter();
-            write(writer);
-            return writer.ToArray();
         }
 
         internal static void AddIds(Item root, HashSet<string> ids)
