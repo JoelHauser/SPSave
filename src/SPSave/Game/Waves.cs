@@ -317,6 +317,7 @@ namespace SPSave.Game
             try
             {
                 ResumeSession.WavesRestored = Waves.Restore(__result, ResumeSession.State?.Waves);
+                BossNotifierCompat.Rebuild(ResumeSession.State?.Waves);
             }
             catch (Exception e)
             {

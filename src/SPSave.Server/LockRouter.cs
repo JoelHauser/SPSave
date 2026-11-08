@@ -17,6 +17,8 @@ namespace SPSave.Server
         [JsonPropertyName("map")] public string Map { get; set; }
         [JsonPropertyName("side")] public string Side { get; set; }
         [JsonPropertyName("serverId")] public string ServerId { get; set; }
+        /// <summary>Raid Review's recording time at the save; null without Raid Review (or from an older client).</summary>
+        [JsonPropertyName("raidReviewElapsedMs")] public long? RaidReviewElapsedMs { get; set; }
     }
 
     /// <summary>
@@ -44,10 +46,13 @@ namespace SPSave.Server
                         Map = info.Map,
                         Side = info.Side,
                         ServerId = info.ServerId,
-                        LockedUtc = DateTime.UtcNow.ToString("o")
+                        LockedUtc = DateTime.UtcNow.ToString("o"),
+                        RaidReviewRaidId = RaidReviewContinuation.Hold(sessionId.ToString()),
+                        RaidReviewElapsedMs = info.RaidReviewElapsedMs
                     };
                     LockStore.Set(raidLock);
-                    SPSaveLoader.Log($"Profile {raidLock.ProfileId} locked: raid on {raidLock.Map} saved ({raidLock.ServerId}).");
+                    SPSaveLoader.Log($"Profile {raidLock.ProfileId} locked: raid on {raidLock.Map} saved ({raidLock.ServerId})" +
+                                     (raidLock.RaidReviewRaidId != null ? $"; Raid Review raid {raidLock.RaidReviewRaidId} kept for the resume." : "."));
                     return new ValueTask<string>(Ok());
                 }),
                 new RouteAction("/spsave/unlock", (url, info, sessionId, output, token) =>

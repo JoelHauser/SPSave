@@ -15,6 +15,10 @@ namespace SPSave.Server
         /// <summary>The saved raid's serverId; the client checks its save against it.</summary>
         [JsonPropertyName("serverId")] public string ServerId { get; set; }
         [JsonPropertyName("lockedUtc")] public string LockedUtc { get; set; }
+        /// <summary>The Raid Review raid that recorded the saved raid so far (RaidReviewContinuation); null without one.</summary>
+        [JsonPropertyName("raidReviewRaidId")] public string RaidReviewRaidId { get; set; }
+        /// <summary>Raid Review's recording time at the save, to finish that recording if the save is thrown away.</summary>
+        [JsonPropertyName("raidReviewElapsedMs")] public long? RaidReviewElapsedMs { get; set; }
     }
 
     /// <summary>
@@ -76,7 +80,13 @@ namespace SPSave.Server
             {
                 File.Delete(path);
             }
-            return Locks.TryRemove(profileId, out _);
+            if (!Locks.TryRemove(profileId, out var removed))
+            {
+                return false;
+            }
+            // A save thrown away (never resumed) leaves its Raid Review recording held: finish it.
+            RaidReviewContinuation.Release(removed);
+            return true;
         }
 
         private static string PathFor(string profileId)

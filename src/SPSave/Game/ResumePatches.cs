@@ -37,6 +37,30 @@ namespace SPSave.Game
     }
 
     /// <summary>
+    /// A restored corpse is spawned by GameWorld.SpawnLoot with reinitBody, so Corpse.InitBody loads a bundle for every
+    /// entry of its customization. The Voice entry has no model ("Prefab" is a voice name), CustomizationSolver.GetBundle
+    /// answers null, and ObjectsFactory.ConvertResourceInfo throws on it: one NullReferenceException per corpse
+    /// (2026-11-08, Woods: 5 corpses, 5 errors). A dying bot's corpse never takes this path. The parts that have a
+    /// model are already loaded (PrefabPathsPatch), so entries without a bundle are left out of the load.
+    /// </summary>
+    internal sealed class CorpseCustomizationPatch : ModulePatch
+    {
+        protected override MethodBase GetTargetMethod() =>
+            AccessTools.Method(typeof(EFT.Interactive.Corpse), nameof(EFT.Interactive.Corpse.LoadCustomizationResources));
+
+        [PatchPrefix]
+        private static void Prefix(ref List<string> customizationsData)
+        {
+            var solver = Singleton<CustomizationSolver>.Instance;
+            if (!ResumeSession.Active || solver == null || customizationsData == null)
+            {
+                return;
+            }
+            customizationsData = customizationsData.Where(id => solver.GetBundle(id) != null).ToList();
+        }
+    }
+
+    /// <summary>
     /// Restored corpses need their heads and clothing loaded; in a normal raid that happened when the bot spawned.
     /// They join the player's preload (LocalGameMatching) while a resume is loading.
     /// </summary>

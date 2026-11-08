@@ -56,6 +56,11 @@ namespace SPSave.Server
             {
                 Log(pit + ".");
             }
+            var raidReview = RaidReviewContinuation.Enable();
+            if (raidReview != null)
+            {
+                Log(raidReview + ".");
+            }
             return Task.CompletedTask;
         }
     }

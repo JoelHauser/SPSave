@@ -22,7 +22,12 @@ namespace SPSave.Game
         internal static bool Lock(Manifest manifest)
         {
             // The raid side as local/start sends it (saves are PMC raids), not manifest.Side (the character's: Usec/Bear).
-            var body = JsonConvert.SerializeObject(new { map = manifest.Map, side = "Pmc", serverId = manifest.ServerId });
+            // Raid Review's recording time so far: the server finishes that recording with it if the save is thrown away.
+            var body = JsonConvert.SerializeObject(new
+            {
+                map = manifest.Map, side = "Pmc", serverId = manifest.ServerId,
+                raidReviewElapsedMs = RaidReviewCompat.ReadElapsedMs()
+            });
             return IsOk(Post("/spsave/lock", body));
         }
 

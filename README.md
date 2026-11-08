@@ -3,7 +3,7 @@
 An SPT mod that lets you save a raid, close the game, and pick up the same raid later: your gear, the world and the
 bots come back where you left them.
 
-**Version 1.0.0** for **SPT 4.1.6** (EFT 0.16.9.40743), solo PMC raids. Download it from
+**Version 1.0.1** for **SPT 4.1.6** (EFT 0.16.9.40743), solo PMC raids. Download it from
 [Releases](https://github.com/JoelHauser/SPSave/releases).
 
 ## How it works
@@ -34,8 +34,8 @@ quests and stats once, across every session of the raid.
 
 ## Compatibility
 
-Works with SAIN (bots keep their personality), ABPS, ORBIT, Pit FireTeam (squadmates come back at their spots) and
-Menu Overhaul. If your mods change between saving and resuming, you're told which ones before the raid loads. A save
+Works with SAIN (bots keep their personality), ABPS, ORBIT, Pit FireTeam (squadmates come back at their spots),
+Menu Overhaul, BossNotifier and Raid Review (both halves are one recorded raid). If your mods change between saving and resuming, you're told which ones before the raid loads. A save
 from another game version can only be abandoned.
 
 > **Don't remove or update mods while a save is waiting.** If the save holds items from a mod that's gone, the raid

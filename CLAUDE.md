@@ -4,20 +4,18 @@ SPT client mod plus a small server mod: save a PMC raid, quit, resume it later. 
 Joel's priorities: zero cost during normal play; verified APIs only (decompile with `ilspycmd`, never guess member
 names); never call anything release-ready before his in-game checks.
 
-## State (2026-11-07)
+## State (2026-11-08)
 
-- **1.0.0 is public** (GitHub release `v1.0.0`, MIT; Joel uploaded it to Forge). GUID for client and server:
+- **1.0.1 is public** (GitHub release `v1.0.1`, MIT; Forge upload is Joel's). GUID for client and server:
   `com.mybutthasarash.spsave`. The very first 1.0.0 build used `com.joelhauser.spsave` (`Plugin.OldGuid`, ignored by
-  the mod-list check).
-- **`main` is past the release** (`f3a3d9e`, "Cleanup after 1.0.0"): F12 down to two settings ("Saving" combat
-  window, "Pit FireTeam" teammates), no `captures.csv`, dead code and `tools/FrameProbe` removed. Ships as **1.0.1**
-  after one in-game check (Save & Quit → RECONNECT, "Captured … round trip ok", F12 sections). `c-server` is an old
+  the mod-list check). 1.0.1: the 1.0.0 cleanup (two F12 settings, no `captures.csv`), Raid Review joined across
+  saves, BossNotifier's list from the saved rolls, no corpse customization errors on a resume. `c-server` is an old
   copy of `main`; work on `main`.
-- Installed in `H:\SPT4.1.X`: client from `main`; the server mod there is still the pre-GUID 1.0.0 build (the server
-  was running when it was rebuilt): copy it in with the server stopped.
-- Passed in game: Factory and Customs (save, RECONNECT, second save of a resumed raid, LEAVE → MIA, combat save →
-  Killed), SAIN/ABPS/ORBIT bots, Pit FireTeam squadmate, Menu Overhaul menus. How each step was reached:
-  docs/HISTORY.md.
+- Installed in `H:\SPT4.1.X`: 1.0.1, client and server.
+- Passed in game: Factory, Customs and Woods (save, RECONNECT, second save of a resumed raid, LEAVE → MIA, combat
+  save → Killed), SAIN/ABPS/ORBIT bots, Pit FireTeam squadmate, Menu Overhaul menus; Raid Review across a server
+  restart (Customs, Factory), BossNotifier list from the save. Not seen yet: a thrown-away save finishing its Raid
+  Review raid. How each step was reached: docs/HISTORY.md.
 
 ## Open work
 
@@ -106,6 +104,16 @@ Compatibility code is reflection only, with every member checked against the ins
   (`MatchSquadButtonBrush`), else its hover highlight sticks.
 - **Halloween zombies** (off in SPT by default): `ZombieMidSessionPatch` marks the mid-raid spawn round done when the
   saved raid was past half time.
+- **BossNotifier** (`BossNotifierCompat`, not yet seen in game): it lists bosses from `BossLocationSpawn.Init`, which
+  first runs on the server's fresh roll that `LocalGame.Create` builds; after `Waves.Restore` its list is rebuilt from
+  the saved rolls through its own postfix (2026-11-08: a Woods save without Goons announced Knight).
+- **Raid Review** (`RaidReviewCompat` client, `RaidReviewContinuation` server; not yet seen in game): one raid across
+  saves. The lock notes the profile's Raid Review raid and marks it exit `Left` (its cleanup deletes raids with no
+  exit); the resume's `SessionManager.AddRaid` gets that id back, and the client moves Raid Review's stopwatch on by
+  `RaidState.RaidReviewElapsedMs` right after its OnGameStarted postfix, so times follow on. At END the raid's
+  `created_at`/`time` become the resume's (its purge keeps the last 30 by `created_at`). A save thrown away without a
+  resume (`LockStore.Clear`, no resume START for that raid) gets `timeInRaid` from the lock's `raidReviewElapsedMs`.
+  Seen working in game 2026-11-08 (Customs, server restart between the halves).
 
 ## Traps
 

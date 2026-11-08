@@ -71,7 +71,7 @@ If `SAVE & QUIT` itself fails, nothing is lost: **your raid simply carries on.**
 
 | | Mods |
 | - | - |
-| ✅ **Works with** | SAIN, ABPS, ORBIT, Pit FireTeam, Menu Overhaul |
+| ✅ **Works with** | SAIN, ABPS, ORBIT, Pit FireTeam, Menu Overhaul, BossNotifier, Raid Review |
 | ❌ **Not for** | Fika or co-op (solo play only) |
 
 ## Known limitations

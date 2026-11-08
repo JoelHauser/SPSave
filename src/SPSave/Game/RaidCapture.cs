@@ -120,6 +120,7 @@ namespace SPSave.Game
             state.Combat = new CombatState { WindowSeconds = combatWindowSeconds, InCombat = verdict.InCombat, Detail = verdict.Describe() };
             report.InCombat = verdict.InCombat;
             report.CombatDetail = verdict.Describe();
+            state.RaidReviewElapsedMs = RaidReviewCompat.ReadElapsedMs();
             // Spawn waves to come. Without them a resume holds fresh spawns instead of failing.
             try
             {

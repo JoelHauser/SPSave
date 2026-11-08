@@ -21,13 +21,15 @@ namespace SPSave
     [BepInDependency(SainCompat.Guid, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency(AbpsCompat.Guid, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.chazut.orbit", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency(RaidReviewCompat.Guid, BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency(BossNotifierCompat.Guid, BepInDependency.DependencyFlags.SoftDependency)]
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string Guid = "com.mybutthasarash.spsave";
 
         /// <summary>The GUID of the first 1.0.0 build; saves made with it list it among their plugins.</summary>
         public const string OldGuid = "com.joelhauser.spsave";
-        public const string Version = "1.0.0";
+        public const string Version = "1.0.1";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<float> CombatWindowSeconds;
@@ -62,6 +64,7 @@ namespace SPSave
             // Resume: the saved profile, world, waves and bots go in while the raid loads.
             new LocalGameMatchingPatch().Enable();
             new PrefabPathsPatch().Enable();
+            new CorpseCustomizationPatch().Enable();
             new LocalGameCreatePatch().Enable();
             new PitSquadPatch().Enable();
             new GameTimerStartPatch().Enable();
@@ -75,6 +78,7 @@ namespace SPSave
             new GameStartPatch().Enable();
             new ZombieMidSessionPatch().Enable();
             SainCompat.Enable();
+            RaidReviewCompat.Enable();
 
             // Progress carried over from earlier sessions of the raid.
             new BeginStatisticsSessionPatch().Enable();

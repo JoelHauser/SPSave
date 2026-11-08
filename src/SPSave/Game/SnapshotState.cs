@@ -34,6 +34,8 @@ namespace SPSave.Game
         public WavesState Waves;
         /// <summary>The player's living Pit FireTeam followers (PitFireTeamCompat); null when Pit FireTeam isn't loaded.</summary>
         public List<PitFollowerState> PitFollowers;
+        /// <summary>Raid Review's recording time at the save (RaidReviewCompat); null when it wasn't recording.</summary>
+        public long? RaidReviewElapsedMs;
     }
 
     /// <summary>
