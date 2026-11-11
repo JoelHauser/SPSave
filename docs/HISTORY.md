@@ -185,6 +185,10 @@ and `main` are the same. Release zip: `dist/SPSave-1.0.0.zip` (dist/ is ignored 
 Cleanup after release (2026-11-07): F12 has two settings, `Saving` → combat window and `Pit FireTeam` → teammates;
 the "Resume saved raids" and "Verify round trip" switches are gone (the round trip always runs), `captures.csv`
 is no longer written (the "Captured …" log line keeps the numbers), `RaidCapture.Binary` and `tools/FrameProbe` removed.
+**1.0.2 released 2026-11-10:** pause menu positions in MenuScreen's local space. 1.0.1 kept RESUME's home as a world
+position; after a switch from 3440x1440 to 2560x1440 world units became canvas units (1 unit = 1.333 px), so
+SAVE & QUIT went to the old point (far right of LEAVE) and RESUME off screen. RESUME's home is now its own
+`anchoredPosition`. Passed in game 2026-11-10 (Joel).
 
 ## Customs, MY SQUAD highlight, gaps (2026-11-07)
 

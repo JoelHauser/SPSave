@@ -4,6 +4,8 @@
 
 The pizza guy is at the door, the baby just woke up, your boss is calling, and you're 25 minutes into the best raid of the week. Now you don't have to choose: **save the raid, deal with life, and come back to it later**, right where you left off.
 
+**Version 1.0.2** for **SPT 4.1.6** (Escape from Tarkov 0.16.9.40743). Solo PMC raids.
+
 ---
 
 ## Features
@@ -57,6 +59,13 @@ If `SAVE & QUIT` itself fails, nothing is lost: **your raid simply carries on.**
    - `[game folder]\SPT_Runtime\user\mods\SPSave\SPSave.Server.dll`
 3. Start the server, then the game.
 
+## Updating
+
+1. **Finish or abandon any saved raid first:** press `RECONNECT` and play it out, or press `LEAVE`.
+2. Close the game and the SPT server. The server keeps its file open while it runs.
+3. Extract the new archive into your SPT folder and let it **overwrite both files**. Always update both together.
+4. Start the server, then the game.
+
 ## Uninstalling
 
 **Resume or abandon any saved raid first.** If your profile is already stuck locked:
@@ -71,8 +80,17 @@ If `SAVE & QUIT` itself fails, nothing is lost: **your raid simply carries on.**
 
 | | Mods |
 | - | - |
-| ✅ **Works with** | SAIN, ABPS, ORBIT, Pit FireTeam, Menu Overhaul, BossNotifier, Raid Review |
+| ✅ **Works with** | SAIN, ABPS, ORBIT, Pit FireTeam, BossNotifier, Raid Review |
 | ❌ **Not for** | Fika or co-op (solo play only) |
+
+| Mod | What SPSave does with it |
+| - | - |
+| **SAIN** | Bots that come back keep their personality. |
+| **ABPS** | Its PMC waves carry on from where the raid was, and returning PMCs count toward its spawn spacing. |
+| **ORBIT** | Sleeping bots are saved and come back too. |
+| **Pit FireTeam** | Your squadmates come back at their spots. If you abandon the raid or die, F12 decides whether they're lost too. |
+| **BossNotifier** | After a resume it lists the bosses your saved raid actually had. |
+| **Raid Review** | A saved raid is recorded as **one raid**: both halves on one timeline, however long you were away. |
 
 ## Known limitations
 
@@ -97,6 +115,25 @@ The save couldn't be rebuilt, usually because a mod was removed or changed while
 
 **My traders and flea say I'm in a raid.**
 A save is waiting: resume or abandon it.
+
+**Where's my raid in Raid Review?**
+It shows once, dated from when you resumed it, with the whole raid from start to finish. If a save is thrown away (for example, after a game update), the part played before the save shows as a finished raid.
+
+---
+
+## Changelog
+
+**1.0.2**
+- Pause menu: `SAVE & QUIT` and `RESUME` stay in their column when the screen resolution changes during a session (for example, switching an ultrawide to 16:9). Before, `SAVE & QUIT` jumped to the right of `DISCONNECT` and `RESUME` went off screen.
+
+**1.0.1**
+- Raid Review: a saved raid is recorded as one raid, not just the part after the resume.
+- BossNotifier: shows the saved raid's bosses after a resume, not ones the raid never had.
+- No more log errors for bodies brought back by a resume.
+- F12 has two settings, under *Saving* and *Pit FireTeam*.
+
+**1.0.0**
+- First release.
 
 ---
 

@@ -4,14 +4,15 @@ SPT client mod plus a small server mod: save a PMC raid, quit, resume it later. 
 Joel's priorities: zero cost during normal play; verified APIs only (decompile with `ilspycmd`, never guess member
 names); never call anything release-ready before his in-game checks.
 
-## State (2026-11-08)
+## State (2026-11-10)
 
-- **1.0.1 is public** (GitHub release `v1.0.1`, MIT; Forge upload is Joel's). GUID for client and server:
+- **1.0.2 is public** (GitHub release `v1.0.2`, MIT; Forge upload is Joel's). GUID for client and server:
   `com.mybutthasarash.spsave`. The very first 1.0.0 build used `com.joelhauser.spsave` (`Plugin.OldGuid`, ignored by
   the mod-list check). 1.0.1: the 1.0.0 cleanup (two F12 settings, no `captures.csv`), Raid Review joined across
-  saves, BossNotifier's list from the saved rolls, no corpse customization errors on a resume. `c-server` is an old
+  saves, BossNotifier's list from the saved rolls, no corpse customization errors on a resume. 1.0.2: pause menu
+  buttons placed in local space (a resolution change mid-session moved SAVE & QUIT and RESUME). `c-server` is an old
   copy of `main`; work on `main`.
-- Installed in `H:\SPT4.1.X`: 1.0.1, client and server.
+- Installed in `H:\SPT4.1.X`: 1.0.2 client, 1.0.1 server (same code; the server was running at release).
 - Passed in game: Factory, Customs and Woods (save, RECONNECT, second save of a resumed raid, LEAVE → MIA, combat
   save → Killed), SAIN/ABPS/ORBIT bots, Pit FireTeam squadmate, Menu Overhaul menus; Raid Review across a server
   restart (Customs, Factory), BossNotifier list from the save. Not seen yet: a thrown-away save finishing its Raid

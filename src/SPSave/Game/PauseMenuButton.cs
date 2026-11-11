@@ -53,16 +53,19 @@ namespace SPSave.Game
         /// The pause menu's parent doesn't stack its children (0.8.0's clone landed exactly on LEAVE), and LEAVE sits
         /// at the top of the screen, so SAVE &amp; QUIT goes one stock step below LEAVE, where RESUME
         /// (_hideScreenButton) was, and RESUME moves down by that same step. The step is the game's own LEAVE→RESUME
-        /// distance, so the column keeps the stock spacing. LEAVE stays where it was. World positions, so it holds
-        /// whether or not the buttons share a parent.
+        /// distance, so the column keeps the stock spacing. LEAVE stays where it was.
         /// Pit FireTeam adds SQUAD SETTINGS one row under RESUME (its SquadControlMenuUi); it becomes the column's fourth
         /// row (see Targets). With Pit FireTeam, 0.9.1 showed
         /// RESUME back under SAVE &amp; QUIT (cause unknown), so LayoutKeeper checks again after opening and logs
         /// anything that moved.
+        /// All four buttons share MenuScreen as parent, so the arithmetic is in its local space (canvas units), and
+        /// RESUME's home is its own anchoredPosition. 1.0.1 kept world positions, which go stale when the screen size
+        /// changes: after a switch from 3440x1440 to 2560x1440 world units became canvas units, SAVE &amp; QUIT landed
+        /// far right of LEAVE and RESUME off screen (2026-11-10).
         /// </summary>
         internal static void Arrange(MenuScreen screen, DefaultUIButton button, bool show)
         {
-            var resume = screen._hideScreenButton;
+            var resume = screen._hideScreenButton != null ? screen._hideScreenButton.transform as RectTransform : null;
             var home = button.GetComponent<ResumeHome>();
             if (resume == null || home == null)
             {
@@ -71,20 +74,20 @@ namespace SPSave.Game
             var pit = PitButton(resume);
             if (!show)
             {
-                resume.transform.position = home.Position;
-                if (pit != null && resume.transform is RectTransform resumeRect)
+                resume.anchoredPosition = home.Anchored;
+                if (pit != null)
                 {
                     // Pit FireTeam's own place for it: RESUME's anchoredPosition minus RESUME's height + 5.
-                    pit.anchoredPosition = resumeRect.anchoredPosition - new Vector2(0f, resumeRect.rect.height + 5f);
+                    pit.anchoredPosition = resume.anchoredPosition - new Vector2(0f, resume.rect.height + 5f);
                 }
                 return;
             }
             var targets = Targets(screen, home, resume, pit);
-            button.transform.position = targets.SaveQuit;
-            resume.transform.position = targets.Resume;
+            button.transform.localPosition = targets.SaveQuit;
+            resume.localPosition = targets.Resume;
             if (pit != null)
             {
-                pit.position = targets.Pit;
+                pit.localPosition = targets.Pit;
             }
         }
 
@@ -96,18 +99,21 @@ namespace SPSave.Game
         }
 
         /// <summary>
-        /// One column under LEAVE, evenly spaced. Without Pit FireTeam the step is the game's own LEAVE→RESUME distance.
-        /// With its SQUAD SETTINGS as a fourth row the step is halfway between that and Pit FireTeam's own RESUME→SQUAD
-        /// SETTINGS step (RESUME's height + 5), so the four rows are evenly spaced (Joel: 0.9.2's 140/140/80 looked off).
+        /// One column under LEAVE, evenly spaced, in the parent's local space. Without Pit FireTeam the step is the
+        /// game's own LEAVE→RESUME distance. With its SQUAD SETTINGS as a fourth row the step is halfway between that and
+        /// Pit FireTeam's own RESUME→SQUAD SETTINGS step (RESUME's height + 5), so the four rows are evenly spaced (Joel:
+        /// 0.9.2's 140/140/80 looked off).
         /// </summary>
-        private static Layout Targets(MenuScreen screen, ResumeHome home, DefaultUIButton resume, RectTransform pit)
+        private static Layout Targets(MenuScreen screen, ResumeHome home, RectTransform resume, RectTransform pit)
         {
-            var leave = screen._disconnectButton.transform.position;
-            var stock = home.Position - leave;
+            var leave = screen._disconnectButton.transform.localPosition;
+            // RESUME's local position at home: an anchoredPosition shift moves localPosition by the same amount.
+            var resumeHome = resume.localPosition + (Vector3)(home.Anchored - resume.anchoredPosition);
+            var stock = resumeHome - leave;
             var step = stock;
-            if (pit != null && resume.transform is RectTransform resumeRect && stock.sqrMagnitude > 0.01f)
+            if (pit != null && stock.sqrMagnitude > 0.01f)
             {
-                var pitStep = (resumeRect.rect.height + 5f) * resumeRect.lossyScale.y;
+                var pitStep = resume.rect.height + 5f;
                 step = stock.normalized * ((stock.magnitude + pitStep) / 2f);
             }
             return new Layout { SaveQuit = leave + step, Resume = leave + 2f * step, Pit = leave + 3f * step };
@@ -115,7 +121,7 @@ namespace SPSave.Game
 
         private const string PitButtonName = "pitFireTeam_RaidSettingsButton";
 
-        private static RectTransform PitButton(DefaultUIButton resume)
+        private static RectTransform PitButton(RectTransform resume)
         {
             return resume.transform.parent != null ? resume.transform.parent.Find(PitButtonName) as RectTransform : null;
         }
@@ -147,7 +153,7 @@ namespace SPSave.Game
 
             private void Verify(string when)
             {
-                var resume = Screen != null ? Screen._hideScreenButton : null;
+                var resume = Screen != null && Screen._hideScreenButton != null ? Screen._hideScreenButton.transform as RectTransform : null;
                 var button = GetComponent<DefaultUIButton>();
                 var home = GetComponent<ResumeHome>();
                 if (resume == null || button == null || home == null || !gameObject.activeInHierarchy)
@@ -156,18 +162,18 @@ namespace SPSave.Game
                 }
                 var pit = PitButton(resume);
                 var expected = Targets(Screen, home, resume, pit);
-                if ((resume.transform.position - expected.Resume).sqrMagnitude < 1f &&
-                    (transform.position - expected.SaveQuit).sqrMagnitude < 1f &&
-                    (pit == null || (pit.position - expected.Pit).sqrMagnitude < 1f))
+                if ((resume.localPosition - expected.Resume).sqrMagnitude < 1f &&
+                    (transform.localPosition - expected.SaveQuit).sqrMagnitude < 1f &&
+                    (pit == null || (pit.localPosition - expected.Pit).sqrMagnitude < 1f))
                 {
                     return;
                 }
                 if (!_reported)
                 {
                     _reported = true;
-                    Plugin.Log.LogWarning($"Pause menu: something moved the buttons ({when}): RESUME at {resume.transform.position} " +
-                                          $"(expected {expected.Resume}), SAVE & QUIT at {transform.position} (expected {expected.SaveQuit})" +
-                                          (pit != null ? $", SQUAD SETTINGS at {pit.position} (expected {expected.Pit})" : "") + ". Put back.");
+                    Plugin.Log.LogWarning($"Pause menu: something moved the buttons ({when}): RESUME at {resume.localPosition} " +
+                                          $"(expected {expected.Resume}), SAVE & QUIT at {transform.localPosition} (expected {expected.SaveQuit})" +
+                                          (pit != null ? $", SQUAD SETTINGS at {pit.localPosition} (expected {expected.Pit})" : "") + ". Put back.");
                 }
                 Arrange(Screen, button, show: true);
             }
@@ -186,15 +192,16 @@ namespace SPSave.Game
                 var group = parent != null ? parent.GetComponent<UnityEngine.UI.LayoutGroup>() : null;
                 return c.name + " under " + (parent != null ? parent.name : "-") +
                        (group != null ? " (" + group.GetType().Name + ")" : " (no layout group)") +
-                       " at " + c.transform.position + (rect != null ? " size " + rect.rect.size : "");
+                       " at " + c.transform.localPosition + (rect != null ? " size " + rect.rect.size : "");
             }
             Plugin.Log.LogInfo("Pause menu layout: LEAVE " + Describe(leave) + "; RESUME " + Describe(resume));
         }
 
-        /// <summary>RESUME's stock world position, kept on the clone so moving it never accumulates.</summary>
+        /// <summary>RESUME's stock anchoredPosition, kept on the clone so moving it never accumulates. Unlike a world
+        /// position it holds when the screen size changes.</summary>
         private sealed class ResumeHome : MonoBehaviour
         {
-            public Vector3 Position;
+            public Vector2 Anchored;
         }
 
         private static DefaultUIButton Find(MenuScreen screen, bool create)
@@ -218,9 +225,9 @@ namespace SPSave.Game
             clone.name = ObjectName;
             clone.transform.SetSiblingIndex(leave.transform.GetSiblingIndex() + 1);
             var resume = screen._hideScreenButton;
-            if (resume != null)
+            if (resume != null && resume.transform is RectTransform resumeRect)
             {
-                clone.AddComponent<ResumeHome>().Position = resume.transform.position;
+                clone.AddComponent<ResumeHome>().Anchored = resumeRect.anchoredPosition;
             }
             clone.AddComponent<LayoutKeeper>().Screen = screen;
             LogLayout(leave, resume);
