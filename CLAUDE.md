@@ -29,6 +29,16 @@ names); never call anything release-ready before his in-game checks.
   `Supports` escorts re-roll difficulty; small per-session stats (pedometer, session length) reset; the Halloween
   summoning state (`HalloweenEventController`) isn't saved. BTR, airdrops, artillery and transits don't come back.
 - **Fika:** not supported. What solo support would take: docs/FIKA-COMPAT.md (Joel: leave it for now).
+- **Crash saves (players asked, 2026-11-12; not decided, nothing built):** periodic autosave so a genuine crash can
+  be resumed, not Alt-F4. Sketch: opt-in F12 setting (say every 5 min), the same capture/write/`RoundTrip` path
+  without quitting, skipped in combat (`CombatRule`) and while a resume finishes; lock set at each autosave (a crash
+  gives no later chance; `local/end` already unlocks; check Raid Review's exit `Left` marking on a running raid);
+  `Application.quitting` (Alt-F4, window close) deletes the autosave and unlocks; one file overwritten, not `Retire`.
+  Costs: breaks "nothing during normal play" (~80–90 ms per save on Streets; encode/write/read-back could go to a
+  worker thread, the capture can't; the lock call must be async). Hole: a Task Manager kill looks like a crash
+  (save-scum before a lost fight). Possible check: crash marker in `Player-prev.log` newer than the autosave (marker
+  text unverified), but it also refuses hang kills and SPT server deaths. Suggested to Joel: accept the hole, skip
+  the log check; waiting on his call.
 - **To report to pitAlex** (Pit FireTeam): it records menu button positions the first time it sees the MenuScreen
   and makes MY SQUAD once as a copy of CHARACTER, so a reconnect-mode first menu breaks Menu Overhaul's layout.
 
