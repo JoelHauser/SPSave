@@ -94,6 +94,10 @@ namespace SPSave.Game
             var session = app.Session;
             var location = Location(session, manifest.Map);
             var combat = manifest.ResolveAs != null;
+            if (manifest.AutoSave)
+            {
+                Plugin.Log.LogInfo($"The waiting save is an autosave from {manifest.CreatedUtc} (UTC): the game didn't close normally during that raid.");
+            }
             // A save from another game build can't be loaded at all (ResumeSession refuses it), so it can't be resumed
             // or ended as MIA/Killed in game: LEAVE discards it, as a hard exit would.
             var gameVersion = RaidCapture.GameVersion();

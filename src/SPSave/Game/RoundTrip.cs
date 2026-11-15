@@ -108,7 +108,9 @@ namespace SPSave.Game
                 {
                     var state = JsonConvert.DeserializeObject<RaidState>(Encoding.UTF8.GetString(stateBytes));
                     var descriptor = ProfileCodec.Read(RaidCapture.PlayerJsonSection, playerBytes);
-                    if (!RaidCapture.CheckInventory("Save check", state?.Player?.Items, new Profile(descriptor)))
+                    var rebuilt = new Profile(descriptor);
+                    AmmoFoundInRaid.Log("Save check", AmmoFoundInRaid.Apply(AmmoFoundInRaid.ItemsOf(rebuilt), AmmoFoundInRaid.Ids(state)));
+                    if (!RaidCapture.CheckInventory("Save check", state?.Player?.Items, rebuilt))
                     {
                         problems.Add("the profile rebuilds with different items (see the lines above)");
                     }

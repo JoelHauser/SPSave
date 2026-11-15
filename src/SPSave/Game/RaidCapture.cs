@@ -138,6 +138,19 @@ namespace SPSave.Game
             result.Sections.Add(WorldLoot.Write(loot));
             report.WorldItemIds = result.WorldItemIds.Count;
 
+            // Found-in-raid ammo (Actually Found In Raid): a rebuild loses it, so the save lists it (AmmoFoundInRaid).
+            var firAmmo = new HashSet<string>(StringComparer.Ordinal);
+            AmmoFoundInRaid.Collect(AmmoFoundInRaid.ItemsOf(player.Profile), firAmmo);
+            foreach (var bot in world.AllAlivePlayersList)
+            {
+                if (bot != null && !bot.IsYourPlayer)
+                {
+                    AmmoFoundInRaid.Collect(AmmoFoundInRaid.ItemsOf(bot.Profile), firAmmo);
+                }
+            }
+            AmmoFoundInRaid.Collect(result.WorldItems.Values.Select(v => v.Key), firAmmo);
+            state.FoundInRaidAmmo = firAmmo.ToList();
+
             // Every item has one place: on the player, on one bot, or in the world (corpses included).
             itemOwners.Add(new KeyValuePair<string, IEnumerable<string>>("world", result.WorldItemIds));
             var duplicates = DuplicateCheck.Find(itemOwners);
@@ -210,6 +223,7 @@ namespace SPSave.Game
                     Id = item.Id,
                     Template = item.TemplateId.ToString(),
                     FoundInRaid = item.SpawnedInSession,
+                    IsAmmo = item is Ammo,
                     // A top-level item's address points at its owner (an ItemController) in a live raid and at
                     // nothing in a rebuilt profile: both are the root.
                     Where = container == null || container is ItemController ? "(root)" : $"{container.ID} of {container.ParentItem?.Id}"
@@ -227,6 +241,13 @@ namespace SPSave.Game
                 return true;
             }
             var diff = InventoryCheck.Compare(saved, ItemsOf(profile));
+            if (diff.HasWarnings)
+            {
+                foreach (var line in diff.Warnings(20))
+                {
+                    Plugin.Log.LogWarning($"{when}: {line}");
+                }
+            }
             if (diff.Clean)
             {
                 Plugin.Log.LogInfo($"{when}: {diff.Summary()}.");

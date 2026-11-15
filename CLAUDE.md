@@ -4,7 +4,16 @@ SPT client mod plus a small server mod: save a PMC raid, quit, resume it later. 
 Joel's priorities: zero cost during normal play; verified APIs only (decompile with `ilspycmd`, never guess member
 names); never call anything release-ready before his in-game checks.
 
-## State (2026-11-10)
+## State (2026-11-14)
+
+- **1.0.3 test build, uncommitted, not yet run in game:** `dist\SPSave-1.0.3-test1-SPT4.1.x.zip` (client and
+  server 1.0.3). Two changes: the Actually Found In Raid fix (issue #1) and autosave. Update notes for players:
+  docs/RELEASE-NOTES-1.0.3.md (the Forge page, docs/MOD-DESCRIPTION.md, still says 1.0.2; update it at release).
+  Test steps: "Testing 1.0.3" below. Built on the work laptop, which has no `H:` and no SAIN: client against a
+  mirror (`C:\HUH`'s Managed and BepInEx folders, Assembly-CSharp patched with SPT's delta through
+  SharpHDiffPatch.Core, SAIN 4.5.1 from https://github.com/ArchangelWTF/SAIN, the up-to-date SAIN repo), server
+  against `C:\HUH` (SPT 4.1.6, EFT 0.16.9.40743, same as `H:`). The mirror sits in a session scratchpad and may be
+  gone; rebuild it or build on Joel's machine with the usual commands.
 
 - **1.0.2 is public** (GitHub release `v1.0.2`, MIT; Forge upload is Joel's). GUID for client and server:
   `com.mybutthasarash.spsave`. The very first 1.0.0 build used `com.joelhauser.spsave` (`Plugin.OldGuid`, ignored by
@@ -20,6 +29,15 @@ names); never call anything release-ready before his in-game checks.
 
 ## Open work
 
+- **Issue #1 (Forge, CrossWrap, 2026-11-14): "Save is always discarded"; fixed in 1.0.3, not seen in game.**
+  Their log: every save failed `Save check` on two 7.62x39 BP rounds (magazine, chamber) found-in-raid True -> False.
+  Cause: Actually Found In Raid (RuKira, `com.rukiragaming.actuallyfir`) patches `Ammo.SpawnedInSession` (in the
+  game it always reads false, setter empty) to a `ConditionalWeakTable` keyed by the live `Ammo`; rebuilt items lose
+  it (which step drops it is unproven; on paper both JSON write and `CreateItem` go through the patched property).
+  Fix (`AmmoFoundInRaid`): capture lists found-in-raid ammo ids (player, bots, world) in `RaidState.FoundInRaidAmmo`;
+  the read-back, the resume (player, bots, world loot) and Ready (live players) set them again through the setter;
+  `InventoryCheck` counts an ammo found-in-raid difference as a warning (`AmmoFoundInRaidChanged`), not a failure.
+  Reply to CrossWrap once 1.0.3 is out (Joel posts it).
 - **Not yet seen in game:** Pit FireTeam recruits and boss allies; Interchange (power switch, Killa), Reserve (D2
   lever), Labs (keycard check at RECONNECT, no second keycard use), a big map (Streets, Lighthouse); the server's
   daily-quest freeze (`RepeatableQuestsFreezePatch`); zombies (`ZombieMidSessionPatch`; Joel won't test them).
@@ -29,20 +47,62 @@ names); never call anything release-ready before his in-game checks.
   `Supports` escorts re-roll difficulty; small per-session stats (pedometer, session length) reset; the Halloween
   summoning state (`HalloweenEventController`) isn't saved. BTR, airdrops, artillery and transits don't come back.
 - **Fika:** not supported. What solo support would take: docs/FIKA-COMPAT.md (Joel: leave it for now).
-- **Crash saves (players asked, 2026-11-12; not decided, nothing built):** periodic autosave so a genuine crash can
-  be resumed, not Alt-F4. Sketch: opt-in F12 setting (say every 5 min), the same capture/write/`RoundTrip` path
-  without quitting, skipped in combat (`CombatRule`) and while a resume finishes; lock set at each autosave (a crash
-  gives no later chance; `local/end` already unlocks; check Raid Review's exit `Left` marking on a running raid);
-  `Application.quitting` (Alt-F4, window close) deletes the autosave and unlocks; one file overwritten, not `Retire`.
-  Costs: breaks "nothing during normal play" (~80–90 ms per save on Streets; encode/write/read-back could go to a
-  worker thread, the capture can't; the lock call must be async). Hole: a Task Manager kill looks like a crash
-  (save-scum before a lost fight). Possible check: crash marker in `Player-prev.log` newer than the autosave (marker
-  text unverified), but it also refuses hang kills and SPT server deaths. Suggested to Joel: accept the hole, skip
-  the log check; waiting on his call.
+- **Autosave (players asked 2026-11-12; Joel said build it 2026-11-14; in 1.0.3, not seen in game).** F12 "Saving" →
+  "Autosave every (minutes)", 0-60, default 0 (off). `CaptureController.AutoSaveLoop`: a coroutine that sleeps the
+  whole interval (30 s idle checks while off), then `CaptureWriteLock(autosave: true)`, the same capture, write,
+  `RoundTrip` and lock as SAVE & QUIT without quitting; `Manifest.AutoSave = true`. Skipped in combat (the last
+  autosave stays), Scav raids, a dead player, and resume phases other than None/Live. The lock is set at every
+  autosave (a crash gives no later chance). `Application.quitting` (Alt-F4, window close; not a crash) retires the
+  autosave and unlocks unless SAVE & QUIT is quitting; a normal raid end already retires it (`RaidEndPatch`). A
+  failed check or lock after an autosave existed leaves no save (`Retire` takes `.prev` too), so it unlocks.
+  Accepted (Joel's call, my suggestion): a Task Manager kill looks like a crash; no `Player-prev.log` check. Costs
+  to watch: the freeze per autosave (CrossWrap's Streets save took 1.5-2.3 s, round trip ~0.9 s of it); while
+  locked mid-raid the server refuses item events and the rest (mods that sell or trade during a raid); the lock
+  marks the running Raid Review raid exit 'Left', and at raid end the unlock (client `RaidEndPatch`, before
+  `local/end`) runs Raid Review's thrown-away finish (timeInRaid from the lock) before END writes the real exit.
 - **To report to pitAlex** (Pit FireTeam): it records menu button positions the first time it sees the MenuScreen
   and makes MY SQUAD once as a copy of CHARACTER, so a reconnect-mode first menu breaks Menu Overhaul's layout.
 
+## Testing 1.0.3
+
+Install the test zip into `H:\SPT4.1.X` with the game and server closed (both DLLs). Read `BepInEx\LogOutput.log`
+before relaunching (the next launch overwrites it); a crashed session's Unity log is `Player-prev.log`.
+
+**Issue #1 (Actually Found In Raid).** Install AFR 1.1.x (https://sp-mod.com/mod/2011/actually-found-in-raid-updated).
+1. In a PMC raid, pick up loose ammo in raid (it shows found in raid with AFR). Load some into a magazine, chamber a
+   round, keep some loose in a pocket.
+2. SAVE & QUIT. Expect "raid saved" and the game closing. Log: `Save check: N found-in-raid rounds of ammo marked
+   again`, no `Round trip failed`. A line `rounds of ammo changed found-in-raid (not a failure)` means putting the
+   flags back didn't work, but the save was kept: send the log.
+3. RECONNECT. Log: `Profile rebuilt from the save: N found-in-raid rounds ... marked again`, and at `Taking
+   control` no "can't be marked again" warning. In game: the pocket ammo, the magazine's rounds and the chambered
+   round (unload it) still show found in raid.
+4. Kill a PMC (AFR makes its ammo found in raid), SAVE & QUIT near the body, RECONNECT: the body's ammo is still
+   found in raid. Same for a living PMC carried over (kill it after the resume).
+5. Without AFR (remove it): a save and resume work as in 1.0.2, and the log has no "marked again" lines.
+
+**Autosave.** F12 → Saving → "Autosave every (minutes)" = 1 for testing.
+1. Off by default: a fresh config shows 0, and nothing is autosaved (no `Autosaved` lines).
+2. Set 1. In a quiet spot, wait a minute. Log: `Autosaved <map>: frame N ms ...` and `Profile locked on the server
+   until this autosave ...`. Note the frame time on Factory and on Streets (the freeze players will feel).
+3. Combat: get seen by a bot, stay in contact past the next tick. Log: `Autosave skipped: in combat. The last
+   autosave stays.`
+4. Crash: after an autosave, end the game process in Task Manager (stands in for a crash). Start the game: the
+   menu is in reconnect mode, log `The waiting save is an autosave from ...`. RECONNECT: the raid comes back at the
+   autosave's moment (position, gear, bots, time). After Ready, autosaves carry on in the resumed raid.
+5. Crash, then LEAVE: the raid ends as MIA, as for a normal save. Raid Review (if installed) shows the raid.
+6. Normal quit: after an autosave, Alt-F4 (and once with the window's X). Log: `Game closed normally during the
+   raid: autosave discarded ... and profile unlocked`. Next launch: normal menu, no RECONNECT, stash usable.
+7. Normal raid end: autosave, then extract (and once die). Log: `Raid ended normally (...), so its save can't be
+   resumed`; the menu after is normal and the stash unlocked; the extract/death counts as usual.
+8. SAVE & QUIT after an autosave: works as before, RECONNECT resumes the SAVE & QUIT moment, not the autosave.
+9. While locked mid-raid: anything another mod does with the server during a raid (selling, traders) is refused;
+   note what breaks. Raid Review: after an autosaved raid ends normally, its exit and duration are right.
+10. Interval changes in F12 mid-raid take effect at the next tick; set back to 0 stops autosaving.
+
 ## Decisions (Joel)
+
+- Autosave is opt-in (F12, default off). A Task Manager kill counts as a crash (accepted hole).
 
 - A save in combat resolves as Killed on next launch; Abandon (LEAVE) is MIA. Both load the raid behind a black
   screen and end it through the game's own `GameEnd`, so XP, counters and fail-on-death quests apply as normal. The
@@ -103,6 +163,9 @@ names); never call anything release-ready before his in-game checks.
 
 Compatibility code is reflection only, with every member checked against the installed DLLs.
 
+- **Actually Found In Raid** (`AmmoFoundInRaid`, not yet seen in game): its found-in-raid ammo flag lives outside the
+  item, so saves list those ids and set them again after every rebuild; see issue #1 under Open work. SPSave never
+  references the mod.
 - **SAIN:** personalities pinned (`SainCompat`); SAIN takes on restored bots only after Ready. **ABPS:** PMC waves are
   boss waves; restored PMCs go into its cache (`AbpsCompat`). **ORBIT:** sleeping bots stay in
   `AllAlivePlayersList`, so they're captured. Details: docs/B2-COMPAT.md.
@@ -145,7 +208,8 @@ Compatibility code is reflection only, with every member checked against the ins
 ## Workflow
 
 - Install: `H:\SPT4.1.X` (SPT 4.1.6, EFT 0.16.9.40743; server folder `SPT_Runtime`). Repo
-  https://github.com/JoelHauser/SPSave. The client build needs SAIN installed (compile-time reference).
+  https://github.com/JoelHauser/SPSave. The client build needs SAIN installed (compile-time reference); current SAIN
+  releases: https://github.com/ArchangelWTF/SAIN (4.5.1 has the type names `SainCompat` uses).
 
   ```
   dotnet build src\SPSave -c Release -p:SPTPath="H:\SPT4.1.X" -p:DeployToSPT=true

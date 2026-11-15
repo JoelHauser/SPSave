@@ -138,8 +138,11 @@ namespace SPSave.Game
             var playerSection = sections.ContainsKey(RaidCapture.PlayerJsonSection) ? RaidCapture.PlayerJsonSection : RaidCapture.PlayerSection;
             var descriptor = ProfileCodec.Read(playerSection, sections[playerSection]);
             var profile = new Profile(descriptor);
+            var firAmmo = AmmoFoundInRaid.Ids(state);
+            AmmoFoundInRaid.Log("Profile rebuilt from the save", AmmoFoundInRaid.Apply(AmmoFoundInRaid.ItemsOf(profile), firAmmo));
             RaidCapture.CheckInventory("Profile rebuilt from the save", state.Player?.Items, profile);
             var loot = WorldLoot.Read(sections);
+            AmmoFoundInRaid.Log("World loot rebuilt from the save", AmmoFoundInRaid.Apply(AmmoFoundInRaid.ItemsOf(loot), firAmmo));
             WeatherNode[] weather = null;
             if (sections.TryGetValue(RaidCapture.WeatherSection, out var weatherBytes))
             {
@@ -157,6 +160,7 @@ namespace SPSave.Game
                 try
                 {
                     var bot = new Profile(ProfileCodec.Read(section.Key, section.Value));
+                    AmmoFoundInRaid.Log($"Saved bot {bot.Id}", AmmoFoundInRaid.Apply(AmmoFoundInRaid.ItemsOf(bot), firAmmo));
                     botProfiles[bot.Id] = bot;
                 }
                 catch (Exception e)

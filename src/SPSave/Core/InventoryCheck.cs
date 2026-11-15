@@ -12,6 +12,8 @@ namespace SPSave.Core
         public bool FoundInRaid;
         /// <summary>The container it sits in and that container's item, e.g. "main of 6aee…".</summary>
         public string Where;
+        /// <summary>A round of ammo: its found-in-raid flag is only a warning (AmmoFoundInRaid). False in saves before 1.0.3.</summary>
+        public bool IsAmmo;
 
         public override string ToString()
         {
@@ -24,6 +26,11 @@ namespace SPSave.Core
         public readonly List<ItemRecord> Missing = new List<ItemRecord>();
         public readonly List<ItemRecord> Extra = new List<ItemRecord>();
         public readonly List<KeyValuePair<ItemRecord, ItemRecord>> FoundInRaidChanged = new List<KeyValuePair<ItemRecord, ItemRecord>>();
+        /// <summary>
+        /// Ammo whose found-in-raid flag differs. In the game ammo is never found in raid; only another mod (Actually
+        /// Found In Raid) makes it so, so a difference loses that mod's flag on a few rounds and doesn't fail a save.
+        /// </summary>
+        public readonly List<KeyValuePair<ItemRecord, ItemRecord>> AmmoFoundInRaidChanged = new List<KeyValuePair<ItemRecord, ItemRecord>>();
         public readonly List<KeyValuePair<ItemRecord, ItemRecord>> Moved = new List<KeyValuePair<ItemRecord, ItemRecord>>();
         public int Saved;
         public int Now;
@@ -36,6 +43,14 @@ namespace SPSave.Core
                 ? $"all {Saved} items on the player match the save"
                 : $"{Now} items on the player vs {Saved} saved: {Missing.Count} missing, {Extra.Count} extra, " +
                   $"{FoundInRaidChanged.Count} changed found-in-raid, {Moved.Count} in a different place";
+        }
+
+        public bool HasWarnings => AmmoFoundInRaidChanged.Count > 0;
+
+        public IEnumerable<string> Warnings(int limit)
+        {
+            yield return $"{AmmoFoundInRaidChanged.Count} rounds of ammo changed found-in-raid (not a failure)";
+            foreach (var pair in AmmoFoundInRaidChanged.Take(limit)) yield return $"ammo found-in-raid {pair.Key.FoundInRaid} -> {pair.Value.FoundInRaid}: {pair.Value}";
         }
 
         public IEnumerable<string> Details(int limit)
@@ -66,7 +81,8 @@ namespace SPSave.Core
                 }
                 if (current.FoundInRaid != pair.Value.FoundInRaid)
                 {
-                    diff.FoundInRaidChanged.Add(new KeyValuePair<ItemRecord, ItemRecord>(pair.Value, current));
+                    var changed = new KeyValuePair<ItemRecord, ItemRecord>(pair.Value, current);
+                    (current.IsAmmo || pair.Value.IsAmmo ? diff.AmmoFoundInRaidChanged : diff.FoundInRaidChanged).Add(changed);
                 }
                 if (!string.Equals(current.Where, pair.Value.Where, StringComparison.Ordinal))
                 {

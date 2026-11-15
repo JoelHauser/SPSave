@@ -21,6 +21,8 @@ namespace SPSave.Game
         public List<string> Plugins = new List<string>();
         /// <summary>Null: resume. "Killed": saved in combat, so the next load ends the raid as a death (Core.Resolve).</summary>
         public string ResolveAs;
+        /// <summary>Written by the autosave timer, not Save &amp; Quit: the game crashed or was killed after it. False before 1.0.3.</summary>
+        public bool AutoSave;
     }
 
     public sealed class RaidState
@@ -36,6 +38,11 @@ namespace SPSave.Game
         public List<PitFollowerState> PitFollowers;
         /// <summary>Raid Review's recording time at the save (RaidReviewCompat); null when it wasn't recording.</summary>
         public long? RaidReviewElapsedMs;
+        /// <summary>
+        /// Ids of found-in-raid ammo on the player, bots and in the world (AmmoFoundInRaid). Only Actually Found In
+        /// Raid makes ammo found in raid; without it this is empty. Null in saves before 1.0.3.
+        /// </summary>
+        public List<string> FoundInRaidAmmo;
     }
 
     /// <summary>

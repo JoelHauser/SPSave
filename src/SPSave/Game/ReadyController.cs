@@ -91,6 +91,21 @@ namespace SPSave.Game
             });
             Step("found-in-raid check", () =>
             {
+                // Again on the live player and bots, in case spawning them built new Ammo objects.
+                var firAmmo = AmmoFoundInRaid.Ids(ResumeSession.State);
+                var players = Singleton<GameWorld>.Instance?.AllAlivePlayersList;
+                if (firAmmo != null && players != null)
+                {
+                    var set = 0;
+                    var refused = 0;
+                    foreach (var alive in players)
+                    {
+                        var result = AmmoFoundInRaid.Apply(AmmoFoundInRaid.ItemsOf(alive?.Profile), firAmmo);
+                        set += result.Set;
+                        refused += result.Refused;
+                    }
+                    AmmoFoundInRaid.Log("Taking control", (set, refused));
+                }
                 RaidCapture.CheckInventory("Taking control", ResumeSession.State?.Player?.Items, ResumeSession.Profile);
             });
             Step("raid timer", () =>
