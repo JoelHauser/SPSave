@@ -29,7 +29,7 @@ namespace SPSave
 
         /// <summary>The GUID of the first 1.0.0 build; saves made with it list it among their plugins.</summary>
         public const string OldGuid = "com.joelhauser.spsave";
-        public const string Version = "1.0.3";
+        public const string Version = "1.1.0";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<float> CombatWindowSeconds;
@@ -51,7 +51,8 @@ namespace SPSave
                 new ConfigDescription(
                     "0 = off. Saves the raid in the background every this many minutes (not in combat), so a game crash " +
                     "can be resumed with RECONNECT. Closing the game normally (Alt-F4, the window's X) still scraps the " +
-                    "raid. Each autosave freezes the game for a moment, longer on big maps.",
+                    "raid. Each autosave costs a short hitch (about 0.1 s on Woods, more on big maps); the rest runs in " +
+                    "the background.",
                     new AcceptableValueRange<int>(0, 60)));
             PitTeammateFate = Config.Bind("Pit FireTeam", "Teammates when a saved raid is abandoned or killed", TeammateFate.ShareYourFate,
                 "Abandoning a saved raid (MIA) or a save made in combat (Killed): ShareYourFate reports your saved squadmates " +

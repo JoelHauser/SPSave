@@ -32,7 +32,9 @@ namespace SPSave.Game
             {
                 return;
             }
-            var utility = AccessTools.TypeByName("BotPlacementSystemClient.Utils.Utility");
+            // From ABPS's own assembly: AccessTools.TypeByName scans every loaded type (72 ms of the first autosave of
+            // a session on Woods, 1.0.3 test).
+            var utility = Chainloader.PluginInfos[Guid].Instance?.GetType().Assembly.GetType("BotPlacementSystemClient.Utils.Utility", throwOnError: false);
             _cachedPmcs = utility != null ? AccessTools.Field(utility, "CachedPmcs") : null;
             _lock = utility != null ? AccessTools.Field(utility, "SpawnPointLock") : null;
             _spawnedPerPlayer = utility != null ? AccessTools.Field(utility, "BotsSpawnedPerPlayer") : null;

@@ -175,6 +175,59 @@ namespace SPSave.Tests
             Assert.True(Tag(SnapshotFile.Read(Path.Combine(second, "raid.spsave"))).Contains("second"), "second kept");
         }
 
+        public static void PendingSaveIsNeverLoaded()
+        {
+            using var dir = new TempDir();
+            var path = dir.File("raid.spsave");
+            var pending = path + SnapshotFile.PendingSuffix;
+            SnapshotFile.Write(path, Sections("good"));
+            SnapshotFile.Write(pending, Sections("waiting"));
+            // A crash here: the resume must find the checked save, not the pending one.
+            Assert.True(Tag(SnapshotFile.LoadNewestValid(path, out var from, new List<string>())).Contains("good") && from == path, "checked save loads");
+            File.Delete(path);
+            Assert.True(SnapshotFile.LoadNewestValid(path, out _, new List<string>()) == null, "a pending save alone is nothing to resume");
+        }
+
+        public static void PromoteMakesPendingTheSave()
+        {
+            using var dir = new TempDir();
+            var path = dir.File("raid.spsave");
+            var pending = path + SnapshotFile.PendingSuffix;
+            SnapshotFile.Write(path, Sections("older"));
+            SnapshotFile.Write(path, Sections("old"));
+            SnapshotFile.Write(pending, Sections("new"));
+            SnapshotFile.Write(pending, Sections("newer"));
+            SnapshotFile.Promote(pending, path);
+            Assert.True(Tag(SnapshotFile.Read(path)).Contains("newer"), "pending is the save");
+            Assert.True(Tag(SnapshotFile.Read(path + SnapshotFile.PrevSuffix)).Contains("old") &&
+                        !Tag(SnapshotFile.Read(path + SnapshotFile.PrevSuffix)).Contains("older"), "the old save is .prev");
+            Assert.True(!File.Exists(pending) && !File.Exists(pending + SnapshotFile.PrevSuffix), "no pending files left");
+        }
+
+        public static void PromoteWithoutASaveYet()
+        {
+            using var dir = new TempDir();
+            var path = dir.File("raid.spsave");
+            var pending = path + SnapshotFile.PendingSuffix;
+            SnapshotFile.Write(pending, Sections("first"));
+            SnapshotFile.Promote(pending, path);
+            Assert.True(Tag(SnapshotFile.Read(path)).Contains("first"), "first autosave in place");
+            Assert.True(!File.Exists(path + SnapshotFile.PrevSuffix), "no .prev");
+        }
+
+        public static void DiscardPendingLeavesTheSaveAlone()
+        {
+            using var dir = new TempDir();
+            var path = dir.File("raid.spsave");
+            var pending = path + SnapshotFile.PendingSuffix;
+            SnapshotFile.Write(path, Sections("checked"));
+            SnapshotFile.Write(pending, Sections("bad"));
+            File.WriteAllBytes(pending + SnapshotFile.TempSuffix, new byte[] { 1 });
+            SnapshotFile.DiscardPending(pending);
+            Assert.True(Tag(SnapshotFile.Read(path)).Contains("checked"), "save unchanged");
+            Assert.Equal(1, Directory.GetFiles(Path.GetDirectoryName(path)).Length, "only the save left");
+        }
+
         public static void FailedWriteLeavesCurrentSaveAlone()
         {
             using var dir = new TempDir();

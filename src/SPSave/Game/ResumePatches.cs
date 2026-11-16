@@ -91,6 +91,9 @@ namespace SPSave.Game
         [PatchPrefix]
         private static void Prefix(LocalGame __instance, ExitStatus exitStatus)
         {
+            // A running autosave stops first (it waits for the worker): it must not lock after the raid ended, and
+            // whatever it wrote is retired below with the rest.
+            CaptureController.CancelAutosave("the raid ended");
             if (CaptureController.Quitting)
             {
                 return;

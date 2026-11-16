@@ -63,7 +63,10 @@ namespace SPSave.Game
                 _looked = true;
                 if (Loaded)
                 {
-                    _getPersonality = AccessTools.Method("SAIN.Interop.SAINExternal:GetPersonality", new[] { typeof(BotOwner) });
+                    // From SAIN's own assembly: "Type:Method" resolves the type with AccessTools.TypeByName, which
+                    // scans every loaded type (part of 44 ms in the first autosave of a session, 1.0.3 test).
+                    var external = Chainloader.PluginInfos[Guid].Instance?.GetType().Assembly.GetType("SAIN.Interop.SAINExternal", throwOnError: false);
+                    _getPersonality = external != null ? AccessTools.Method(external, "GetPersonality", new[] { typeof(BotOwner) }) : null;
                 }
             }
             if (_getPersonality == null)

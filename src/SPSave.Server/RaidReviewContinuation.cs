@@ -16,9 +16,11 @@ namespace SPSave.Server
     /// without END keeps exitStatus '' and its cleanup (GarbageCollector, at start and hourly) deletes it.
     ///
     /// So a saved raid's halves are joined here, as one raid:
-    /// - At the lock (Save &amp; Quit) the profile's current Raid Review raid is noted in the lock and marked exit
-    ///   'Left', which the cleanup keeps (its timeInRaid stays 0, so the keep-the-last-30 purge skips it too); its
-    ///   positions are flushed and compiled, so the half can be viewed while the save waits.
+    /// - At the lock (Save &amp; Quit, each autosave) the profile's current Raid Review raid is noted in the lock and
+    ///   marked exit 'Left', which the cleanup keeps (its timeInRaid stays 0, so the keep-the-last-30 purge skips it
+    ///   too). Its positions aren't compiled there: the raid may still be recording (see Hold).
+    /// - Raid Review's position compile runs on a timer thread, where an exception ends the server: a finalizer logs
+    ///   it instead (CompileFinalizer).
     /// - At the resume's START (the lock is still there; it goes at Ready) AddRaid is given the saved raid's id
     ///   instead, so every packet of the second half is filed under it and its positions go on in the same file.
     ///   The new id's row insert becomes an INSERT OR IGNORE of the saved id (a no-op unless the row was lost). The
@@ -100,7 +102,29 @@ namespace SPSave.Server
             harmony.Patch(handle, prefix: new HarmonyMethod(typeof(RaidReviewContinuation), nameof(HandlePrefix)));
             harmony.Patch(addRaid, prefix: new HarmonyMethod(typeof(RaidReviewContinuation), nameof(AddRaidPrefix)));
             harmony.Patch(_execute, prefix: new HarmonyMethod(typeof(RaidReviewContinuation), nameof(ExecutePrefix)));
+
+            // Raid Review compiles positions on a timer thread, and an exception there ends the server process. A
+            // compile that meets the positions file still open for writing (a packet came after its files were closed)
+            // threw IOException and took the server down (2026-11-08, 2026-11-16). Its END compiles the raid again.
+            var compiler = assembly.GetType("RaidReview.PostRaid.RaidPositionCompiler");
+            var compile = compiler != null ? AccessTools.Method(compiler, "Compile", new[] { typeof(string) }) : null;
+            if (compile == null)
+            {
+                return "Raid Review found: a saved raid's halves are recorded as one raid (its position compile is NOT guarded: RaidPositionCompiler.Compile not found)";
+            }
+            harmony.Patch(compile, finalizer: new HarmonyMethod(typeof(RaidReviewContinuation), nameof(CompileFinalizer)));
             return "Raid Review found: a saved raid's halves are recorded as one raid";
+        }
+
+        /// <summary>A failed position compile is logged, not thrown: thrown on Raid Review's timer, it ends the server.</summary>
+        private static Exception CompileFinalizer(Exception __exception, string raidGuid)
+        {
+            if (__exception != null)
+            {
+                SPSaveLoader.Log($"Raid Review: compiling positions for {raidGuid} failed, the server carries on " +
+                                 $"(the raid's end compiles it again): {__exception.GetBaseException().Message}");
+            }
+            return null;
         }
 
         /// <summary>Raid Review builds its services in its own OnLoad; they're picked up from the first packet.</summary>
@@ -190,8 +214,9 @@ namespace SPSave.Server
                 });
                 update.ContinueWith(t => SPSaveLoader.Log("Raid Review: marking the saved raid failed: " + t.Exception?.GetBaseException().Message),
                     TaskContinuationOptions.OnlyOnFaulted);
-                _flush.Invoke(_fileServiceField.GetValue(handler), null);
-                (_postProcessField.GetValue(handler) as Action<string>)?.Invoke(raidId);
+                // No flush and no compile here (1.0.0-1.0.2 did both, so the first half could be viewed while the
+                // save waited): the raid can still be recording (an autosave, or packets while the game closes),
+                // which reopened the positions file under the compile and crashed the server. END compiles it all.
                 return raidId;
             }
             catch (Exception e)

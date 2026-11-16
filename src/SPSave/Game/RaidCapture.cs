@@ -30,6 +30,24 @@ namespace SPSave.Game
     }
 
     /// <summary>
+    /// One raid moment as data (RaidCapture.Snapshot): nothing in it is read from the game afterwards, except
+    /// Result.WorldItems, which names live items for logging and stays on the main thread.
+    /// </summary>
+    internal sealed class CaptureSnapshot
+    {
+        public CaptureResult Result;
+        public Manifest Manifest;
+        public RaidState State;
+        /// <summary>The player's profile; its inventory is already flattened (InventoryDescriptor._items).</summary>
+        public ProfileDescriptor Player;
+        /// <summary>Bot profiles by section name, flattened like the player's.</summary>
+        public readonly List<KeyValuePair<string, ProfileDescriptor>> Bots = new List<KeyValuePair<string, ProfileDescriptor>>();
+        /// <summary>World loot as LootItemSerializer records, what the game's JSON converter writes for each entry.</summary>
+        public readonly List<object> Loot = new List<object>();
+        public WeatherNode[] Weather;
+    }
+
+    /// <summary>
     /// Reads one raid into save sections. Read-only: nothing here changes the game, so a failed capture leaves the
     /// raid exactly as it was. Runs in a single frame, so the result is one consistent moment without freezing.
     /// Engine-owned data goes through the game's own serializers: ProfileDescriptor (as at raid end, see
@@ -48,7 +66,21 @@ namespace SPSave.Game
         internal static readonly AccessTools.FieldRef<BaseLocalGame<EftGamePlayerOwner>, LocalRaidSettings> RaidSettings =
             AccessTools.FieldRefAccess<BaseLocalGame<EftGamePlayerOwner>, LocalRaidSettings>("_raidSettings");
 
+        /// <summary>Capture and serialize in one go, all on the main thread (Save &amp; Quit).</summary>
         public static CaptureResult Run(float combatWindowSeconds)
+        {
+            var snapshot = Snapshot(combatWindowSeconds);
+            Serialize(snapshot);
+            return snapshot.Result;
+        }
+
+        /// <summary>
+        /// Reads the raid in this frame into data that no longer refers to the game: profile descriptors with their
+        /// inventories flattened (FlatItem[]), loot as LootItemSerializer records (FlatItem[] too), the raid state and
+        /// manifest as SPSave's own objects. <see cref="Serialize"/> turns it into sections and touches nothing else,
+        /// so it can run off the main thread (autosave). Every live read happens here, in one frame: one moment.
+        /// </summary>
+        public static CaptureSnapshot Snapshot(float combatWindowSeconds)
         {
             var world = Singleton<GameWorld>.Instance;
             var player = world != null ? world.MainPlayer : null;
@@ -58,22 +90,28 @@ namespace SPSave.Game
             }
 
             var result = new CaptureResult { ProfileId = player.ProfileId };
+            var snapshot = new CaptureSnapshot { Result = result };
             var report = result.Report;
             report.Utc = DateTime.UtcNow;
             report.Map = world.LocationId ?? "";
             report.ProfileId = player.ProfileId;
             var state = new RaidState();
+            snapshot.State = state;
             var watch = Stopwatch.StartNew();
 
             // Player: profile as GameEnd would send it, with live health instead of the pre-raid copy.
-            var playerDescriptor = Describe(player);
-            result.Sections.Add(Section(PlayerJsonSection, ProfileCodec.Write(playerDescriptor)));
+            var step = Stopwatch.StartNew();
+            snapshot.Player = Describe(player);
+            report.Step("player describe", Lap(step));
+            Flatten(snapshot.Player);
+            report.Step("player flatten", Lap(step));
             state.Player = ReadPlayer(player);
             report.PlayerEffects = state.Player.Effects.Count;
             report.PlayerItemIds = player.Profile.Inventory.GetPlayerItems(EPlayerItems.All).Select(i => i.Id).Distinct().Count();
             state.Player.FoundInRaidItems = CountFoundInRaid(player.Profile);
             state.Player.Items = ItemsOf(player.Profile);
             ReadSearch(player, state.Player);
+            report.Step("player state", Lap(step));
             report.PlayerMs = Lap(watch);
 
             // Living bots: their profiles (identity, gear, health), where they are, and what they know about the player.
@@ -91,14 +129,18 @@ namespace SPSave.Game
                 }
                 try
                 {
+                    step.Restart();
                     var descriptor = Describe(bot);
-                    var bytes = ProfileCodec.Write(descriptor);
+                    report.Step("bots describe", Lap(step));
+                    Flatten(descriptor);
+                    report.Step("bots flatten", Lap(step));
                     var botState = ReadBot(bot, player, groups, out var known);
-                    result.Sections.Add(Section(BotSectionPrefix + bot.ProfileId + ProfileCodec.JsonSuffix, bytes));
+                    snapshot.Bots.Add(new KeyValuePair<string, ProfileDescriptor>(BotSectionPrefix + bot.ProfileId + ProfileCodec.JsonSuffix, descriptor));
                     state.Bots.Add(botState);
                     awareness.Add(known);
                     itemOwners.Add(new KeyValuePair<string, IEnumerable<string>>($"bot {bot.Profile?.Nickname} {bot.ProfileId}",
                         ItemsOf(bot.Profile).Select(i => i.Id).ToList()));
+                    report.Step("bots state", Lap(step));
                 }
                 catch (Exception e)
                 {
@@ -107,6 +149,7 @@ namespace SPSave.Game
                 }
             }
             report.BotsAlive = state.Bots.Count;
+            step.Restart();
             // Pit FireTeam: which of those bots are the player's followers (refuses the save if it can't tell).
             var pitWatch = Stopwatch.StartNew();
             state.PitFollowers = PitFireTeamCompat.Capture(player);
@@ -121,6 +164,7 @@ namespace SPSave.Game
             report.InCombat = verdict.InCombat;
             report.CombatDetail = verdict.Describe();
             state.RaidReviewElapsedMs = RaidReviewCompat.ReadElapsedMs();
+            report.Step("pit+combat", Lap(step));
             // Spawn waves to come. Without them a resume holds fresh spawns instead of failing.
             try
             {
@@ -131,11 +175,21 @@ namespace SPSave.Game
                 state.Waves = null;
                 Plugin.Log.LogWarning("Spawn waves not captured; a resume will hold fresh spawns: " + e);
             }
+            report.Step("waves", Lap(step));
             report.BotsMs = Lap(watch);
 
-            // World loot: loose items, containers with their current contents, corpses with their pose.
+            // World loot: loose items, containers with their current contents, corpses with their pose. Turned into
+            // the records the game's own JSON converter writes (JsonConverterAdapter: LootItemSerializer.Serialize,
+            // which flattens the live items), so the JSON itself can be written later.
             var loot = CollectLoot(world, report, result);
-            result.Sections.Add(WorldLoot.Write(loot));
+            report.Step("loot collect", Lap(step));
+            foreach (var entry in loot)
+            {
+                snapshot.Loot.Add(entry is JsonCorpse corpse
+                    ? ((ISerializer<JsonCorpse>)new LootItemSerializer()).Serialize(corpse)
+                    : ((ISerializer<JsonLootItem>)new LootItemSerializer()).Serialize(entry));
+            }
+            report.Step("loot flatten", Lap(step));
             report.WorldItemIds = result.WorldItemIds.Count;
 
             // Found-in-raid ammo (Actually Found In Raid): a rebuild loses it, so the save lists it (AmmoFoundInRaid).
@@ -150,10 +204,12 @@ namespace SPSave.Game
             }
             AmmoFoundInRaid.Collect(result.WorldItems.Values.Select(v => v.Key), firAmmo);
             state.FoundInRaidAmmo = firAmmo.ToList();
+            report.Step("fir ammo", Lap(step));
 
             // Every item has one place: on the player, on one bot, or in the world (corpses included).
             itemOwners.Add(new KeyValuePair<string, IEnumerable<string>>("world", result.WorldItemIds));
             var duplicates = DuplicateCheck.Find(itemOwners);
+            report.Step("duplicates", Lap(step));
             report.DuplicateItems = duplicates.Count;
             foreach (var pair in duplicates.Take(10))
             {
@@ -163,23 +219,65 @@ namespace SPSave.Game
             report.LootMs = Lap(watch);
 
             // Doors, raid clock, time of day, weather.
+            step.Restart();
             state.Doors = ReadDoors();
             report.Doors = state.Doors.Count;
+            report.Step("doors", Lap(step));
             var nodes = WeatherNodesPatch.Last;
             state.Clock = ReadClock(world, nodes);
             report.Weather = !state.Clock.HasWeather ? "none on this map"
                 : state.Clock.WeatherNodes == 0 ? "NODES MISSING"
                 : $"{state.Clock.WeatherNodes} nodes{(state.Clock.WeatherMatchesCurve ? "" : ", curve differs")}";
-            if (nodes != null)
-            {
-                result.Sections.Add(Section(WeatherSection, Encoding.UTF8.GetBytes(nodes.ToJson())));
-            }
+            snapshot.Weather = nodes?.ToArray();
+            snapshot.Manifest = BuildManifest(world, player);
+            report.Step("clock", Lap(step));
             report.WorldMs = Lap(watch);
+            return snapshot;
+        }
 
-            result.Sections.Insert(0, Section(ManifestSection, Json(BuildManifest(world, player))));
-            result.Sections.Add(Section(StateSection, Json(state)));
+        /// <summary>
+        /// The snapshot as save sections, in the order Save &amp; Quit has always written them. Reads only the snapshot
+        /// (no game objects), so it is safe off the main thread. Runs the game's JSON converters, which for these types
+        /// only copy data: WeatherSerializer, MongoID, enums, UnparsedData.
+        /// </summary>
+        public static void Serialize(CaptureSnapshot snapshot)
+        {
+            var result = snapshot.Result;
+            var report = result.Report;
+            var watch = Stopwatch.StartNew();
+            var step = Stopwatch.StartNew();
+            result.Sections.Clear();
+            result.Sections.Add(Section(ManifestSection, Json(snapshot.Manifest)));
+            result.Sections.Add(Section(PlayerJsonSection, ProfileCodec.Write(snapshot.Player)));
+            report.Step("player json", Lap(step));
+            report.PlayerMs += Lap(watch);
+            foreach (var bot in snapshot.Bots)
+            {
+                result.Sections.Add(Section(bot.Key, ProfileCodec.Write(bot.Value)));
+            }
+            report.Step("bots json", Lap(step));
+            report.BotsMs += Lap(watch);
+            result.Sections.Add(new KeyValuePair<string, byte[]>(WorldLoot.JsonSection,
+                Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(snapshot.Loot.ToArray(), EftJsonConverters.Converters))));
+            report.Step("loot json", Lap(step));
+            report.LootMs += Lap(watch);
+            if (snapshot.Weather != null)
+            {
+                result.Sections.Add(Section(WeatherSection, Encoding.UTF8.GetBytes(snapshot.Weather.ToJson())));
+            }
+            report.Step("weather json", Lap(step));
+            report.WorldMs += Lap(watch);
+            result.Sections.Add(Section(StateSection, Json(snapshot.State)));
             report.StateMs = Lap(watch);
-            return result;
+        }
+
+        /// <summary>
+        /// Flattens the descriptor's inventory now (InventoryDescriptor.OnJSONSerializing, which ToJson would run
+        /// first anyway: it returns at once once _items is set), so its cost is timed apart from the JSON writing.
+        /// </summary>
+        private static void Flatten(ProfileDescriptor descriptor)
+        {
+            descriptor.Inventory?.OnJSONSerializing(default(System.Runtime.Serialization.StreamingContext));
         }
 
         internal static ProfileDescriptor Describe(Player player)

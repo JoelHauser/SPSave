@@ -181,6 +181,40 @@ namespace SPSave.Core
             return result;
         }
 
+        /// <summary>
+        /// An autosave is written and checked under this name beside the save (path + ".pending"), which
+        /// <see cref="LoadNewestValid"/> never reads: a crash before <see cref="Promote"/> leaves the last checked save.
+        /// </summary>
+        public const string PendingSuffix = ".pending";
+
+        /// <summary>
+        /// Makes a checked pending save the save: the current one moves to ".prev", the pending file into its place.
+        /// Both moves are renames in one folder.
+        /// </summary>
+        public static void Promote(string pending, string path)
+        {
+            if (!File.Exists(pending))
+            {
+                throw new FileNotFoundException("No pending save to promote.", pending);
+            }
+            var previous = path + PrevSuffix;
+            if (File.Exists(path))
+            {
+                TryDelete(previous);
+                File.Move(path, previous);
+            }
+            File.Move(pending, path);
+            DiscardPending(pending);
+        }
+
+        /// <summary>Deletes a pending save and what writing it left (its ".tmp" and ".prev"). Never throws.</summary>
+        public static void DiscardPending(string pending)
+        {
+            TryDelete(pending);
+            TryDelete(pending + TempSuffix);
+            TryDelete(pending + PrevSuffix);
+        }
+
         public static Dictionary<string, byte[]> Read(string path)
         {
             return Decode(File.ReadAllBytes(path));
@@ -228,6 +262,8 @@ namespace SPSave.Core
             {
                 target = stamp + "-" + n;
             }
+            // An autosave the game crashed in the middle of (never resumed: see PendingSuffix).
+            DiscardPending(path + PendingSuffix);
             var moved = false;
             foreach (var candidate in new[] { path, path + TempSuffix, path + PrevSuffix })
             {

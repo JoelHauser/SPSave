@@ -256,3 +256,20 @@ shifts the raid timer and `MainTimerPanel._dateTime` by the fade time (Pause mod
 above means that moment.
 The in-raid `ActiveHealthController` ignores `UpdateTime`, so time away doesn't regenerate health. Corpses load their
 own customization (`Corpse.Init` → `InitBody`).
+
+## 1.1.0: autosave without the freeze, AFR, Raid Review crash (2026-11-14 to 2026-11-16)
+
+- Issue #1 (CrossWrap): Actually Found In Raid keeps ammo found-in-raid outside the item, so every rebuild lost it and
+  every save failed its check. Saves now list those ammo ids and set them again (`AmmoFoundInRaid`). Seen working on
+  Woods: pocket, magazine, chamber, a killed PMC's body.
+- Autosave first ran Save & Quit's one-frame path on a timer: 834-981 ms per autosave on Woods. Per-step timing
+  (`Save steps`) showed the read-back check was ~430 ms, JSON ~300 ms, and two one-time type scans (ABPS 72 ms, SAIN
+  ~40 ms; now looked up in their own assemblies). The game's `ProfileDescriptor` keeps the live inventory and flattens
+  it only when serialized, and the loot converter flattens live items too, so the frame now flattens both and a
+  worker writes the JSON; items for the check are built back on the main thread in 4 ms slices. Result: capture
+  frame 115-124 ms, longest slice 9.8 ms, done in 1.4-1.8 s.
+- The SPT server crashed twice in a session (and twice on 2026-11-08): SPSave asked Raid Review to compile a raid's
+  positions at every lock, a later packet reopened the file, and Raid Review's timer compile threw `IOException`,
+  which ends the process. Fixed on the server side (no compile at the lock; finalizer on the compile).
+- A crash between writing an autosave and locking it would have resumed an unchecked file: autosaves are now written
+  as `raid.spsave.pending` and promoted only after the check.

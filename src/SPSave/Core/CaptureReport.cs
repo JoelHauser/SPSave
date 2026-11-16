@@ -40,6 +40,36 @@ namespace SPSave.Core
         public bool RoundTripOk;
         public string RoundTripDetail = "";
 
+        /// <summary>
+        /// Milliseconds per step inside the phases above, summed by name in first-seen order (1.0.3 test builds: where
+        /// an autosave's freeze goes, to decide what can leave the frame).
+        /// </summary>
+        public readonly System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, double>> Steps =
+            new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, double>>();
+
+        public void Step(string name, double ms)
+        {
+            for (var i = 0; i < Steps.Count; i++)
+            {
+                if (Steps[i].Key == name)
+                {
+                    Steps[i] = new System.Collections.Generic.KeyValuePair<string, double>(name, Steps[i].Value + ms);
+                    return;
+                }
+            }
+            Steps.Add(new System.Collections.Generic.KeyValuePair<string, double>(name, ms));
+        }
+
+        public string StepsLine()
+        {
+            var parts = new string[Steps.Count];
+            for (var i = 0; i < Steps.Count; i++)
+            {
+                parts[i] = $"{Steps[i].Key} {Steps[i].Value:F1}";
+            }
+            return string.Join(", ", parts);
+        }
+
         public string Summary()
         {
             return $"{Map}: frame {FrameMs:F0} ms (player {PlayerMs:F0}, bots {BotsMs:F0}, loot {LootMs:F0}, world {WorldMs:F0}, " +

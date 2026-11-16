@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading.Tasks;
 using EFT;
 using EFT.Communications;
 using EFT.UI;
@@ -80,14 +82,14 @@ namespace SPSave.Game
                 yield return new WaitForSecondsRealtime(minutes * 60f);
                 if (Plugin.AutoSaveMinutes.Value > 0)
                 {
-                    AutoSave();
+                    StartAutoSave();
                 }
             }
         }
 
-        private void AutoSave()
+        private void StartAutoSave()
         {
-            if (_busy || Quitting || ScavRaid)
+            if (_busy || _autosaving || Quitting || ScavRaid)
             {
                 return;
             }
@@ -102,16 +104,315 @@ namespace SPSave.Game
             {
                 return;
             }
-            var path = CaptureWriteLock(autosave: true, combatConfirmed: false, out var inCombat);
-            if (path != null)
+            StartCoroutine(AutoSaveRun());
+        }
+
+        // ---- Autosave without the freeze (1.1.0) ----
+        //
+        // Save & Quit does everything in one frame; the game closes after it, so the freeze doesn't matter. An autosave
+        // keeps playing, and on Woods that frame was 834-981 ms, about half of it the read-back check. Only reading the
+        // raid has to be one frame (one consistent moment: no item on a bot and on the ground at once). So:
+        //   1. this frame: RaidCapture.Snapshot reads the raid into data (inventories and loot flattened to FlatItem[]);
+        //   2. a worker thread: JSON, compress, write, read back, decode, parse (no game objects, only that data);
+        //   3. later frames, a few ms each: the read-back's world loot and player are rebuilt into items (the game's
+        //      ItemFactory isn't thread-safe) and compared with the capture; then the swap and the lock.
+        // The worker writes "raid.spsave.pending", which a resume never reads; only a checked autosave replaces
+        // raid.spsave (SnapshotFile.Promote), so a crash at any point leaves the last checked autosave or none. A
+        // failed check throws away only the pending file: the last autosave and its lock stay.
+        // A raid end, a normal quit or Save & Quit while it runs cancels it (CancelAutosave): it waits for the worker,
+        // so no two writers meet, deletes the pending file, and the lock is never taken after that (the lock and the
+        // cancel are both on the main thread).
+
+        /// <summary>Main-thread milliseconds per frame for rebuilding the read-back's world loot.</summary>
+        private const double SliceBudgetMs = 4.0;
+
+        private bool _autosaving;
+
+        /// <summary>The autosave between its capture frame and its lock, if one is running.</summary>
+        private static AutosaveJob _job;
+
+        private sealed class AutosaveJob
+        {
+            public CaptureSnapshot Snapshot;
+            /// <summary>The save (raid.spsave), replaced only by a checked autosave.</summary>
+            public string Path;
+            /// <summary>Where the worker writes and the check reads (raid.spsave.pending).</summary>
+            public string Pending;
+            public volatile bool Cancelled;
+            public Task Work;
+            public WriteResult Write;
+            public RoundTrip.Parsed Parsed;
+            public double WorkerMs;
+            public double ParseMs;
+        }
+
+        /// <summary>
+        /// Stops a running autosave before anything else touches the save or the lock: marks it cancelled, waits for
+        /// its worker (at most a few hundred ms) and deletes its pending file. The save and the lock are the caller's.
+        /// Main thread only.
+        /// </summary>
+        internal static void CancelAutosave(string why)
+        {
+            var job = _job;
+            if (job == null)
             {
-                _autosavePath = path;
+                return;
             }
-            else if (inCombat)
+            _job = null;
+            job.Cancelled = true;
+            try
             {
-                Plugin.Log.LogInfo(_autosavePath != null
-                    ? "Autosave skipped: in combat. The last autosave stays."
-                    : "Autosave skipped: in combat.");
+                job.Work?.Wait(TimeSpan.FromSeconds(30));
+            }
+            catch (Exception)
+            {
+                // A failed worker counts as cancelled.
+            }
+            SnapshotFile.DiscardPending(job.Pending);
+            Plugin.Log.LogInfo($"Autosave in progress stopped ({why}).");
+        }
+
+        private IEnumerator AutoSaveRun()
+        {
+            _autosaving = true;
+            AutosaveJob job = null;
+            try
+            {
+                var total = Stopwatch.StartNew();
+                job = BeginAutosave(out var frameMs);
+                if (job == null)
+                {
+                    yield break;
+                }
+                _job = job;
+                var frames = 0;
+                while (!job.Work.IsCompleted)
+                {
+                    yield return null;
+                    frames++;
+                    if (job.Cancelled)
+                    {
+                        yield break;
+                    }
+                }
+                if (job.Work.IsFaulted)
+                {
+                    DropPending(job, "The autosave failed: " + job.Work.Exception?.GetBaseException(), "SPSave: the autosave failed. See the BepInEx log.");
+                    yield break;
+                }
+
+                // Rebuild the read-back's world loot a few entries per frame, then the player, on the main thread.
+                var report = job.Snapshot.Result.Report;
+                var problems = job.Parsed.Problems;
+                var mainMs = 0d;
+                var longestMs = 0d;
+                var slice = new Stopwatch();
+                var ids = new HashSet<string>(StringComparer.Ordinal);
+                var corpses = 0;
+                var loot = job.Parsed.Loot;
+                if (loot != null)
+                {
+                    var serializer = RoundTrip.LootSerializer();
+                    var next = 0;
+                    while (next < loot.Count)
+                    {
+                        slice.Restart();
+                        try
+                        {
+                            while (next < loot.Count && slice.Elapsed.TotalMilliseconds < SliceBudgetMs)
+                            {
+                                RoundTrip.ReadLootEntry(loot[next++], serializer, ids, ref corpses);
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            problems.Add($"world loot does not decode: {e.Message}");
+                            next = loot.Count;
+                        }
+                        mainMs += slice.Elapsed.TotalMilliseconds;
+                        longestMs = Math.Max(longestMs, slice.Elapsed.TotalMilliseconds);
+                        yield return null;
+                        frames++;
+                        if (job.Cancelled)
+                        {
+                            yield break;
+                        }
+                    }
+                    slice.Restart();
+                    RoundTrip.CompareWorld(ids, corpses, job.Snapshot.Result.WorldItemIds, job.Snapshot.Result.WorldItems, report.Corpses, problems);
+                    report.Step("rt world loot (main, sliced)", mainMs + slice.Elapsed.TotalMilliseconds);
+                }
+
+                slice.Restart();
+                try
+                {
+                    if (job.Parsed.Player != null)
+                    {
+                        RoundTrip.RebuildPlayer(job.Parsed.Player, job.Parsed.State, problems);
+                    }
+                    RoundTrip.CheckWaves(job.Parsed.State);
+                }
+                catch (Exception e)
+                {
+                    problems.Add($"the profile does not rebuild: {e.Message}");
+                }
+                var playerMs = slice.Elapsed.TotalMilliseconds;
+                report.Step("rt player rebuild (main)", playerMs);
+                mainMs += playerMs;
+                longestMs = Math.Max(longestMs, playerMs);
+                yield return null;
+                frames++;
+                if (job.Cancelled)
+                {
+                    yield break;
+                }
+
+                report.RoundTripOk = problems.Count == 0;
+                report.RoundTripDetail = problems.Count == 0
+                    ? $"{job.Parsed.Profiles} profiles and {ids.Count} world items round-trip"
+                    : string.Join("; ", problems);
+                report.RoundTripMs = job.ParseMs + mainMs;
+                report.FrameMs = frameMs;
+                Plugin.Log.LogInfo("Autosaved " + report.Summary());
+                Plugin.Log.LogInfo("Save steps (ms): " + report.StepsLine());
+                if (!report.RoundTripOk)
+                {
+                    DropPending(job, "Round trip failed, autosave discarded: " + report.RoundTripDetail, "SPSave: the autosave didn't check out, so it was discarded.");
+                    yield break;
+                }
+
+                // Swap and lock, as for Save & Quit. Never after a cancel: the raid has ended or the game is closing.
+                if (Quitting || job.Cancelled)
+                {
+                    yield break;
+                }
+                try
+                {
+                    SnapshotFile.Promote(job.Pending, job.Path);
+                }
+                catch (Exception e)
+                {
+                    DropPending(job, "The checked autosave couldn't replace the last one: " + e, "SPSave: the autosave failed. See the BepInEx log.");
+                    yield break;
+                }
+                slice.Restart();
+                var locked = LockClient.Lock(job.Snapshot.Manifest);
+                var lockMs = slice.Elapsed.TotalMilliseconds;
+                Plugin.Log.LogInfo($"Autosave timing: capture frame {frameMs:F0} ms; worker {job.WorkerMs:F0} ms (json, write, read back, parse); " +
+                                   $"check on the main thread {mainMs:F0} ms over {frames} frames, longest {longestMs:F1} ms; lock {lockMs:F0} ms; " +
+                                   $"done {total.Elapsed.TotalMilliseconds:F0} ms after it started.");
+                if (!locked)
+                {
+                    DropUnlocked(job);
+                    yield break;
+                }
+                _autosavePath = job.Path;
+                Plugin.Log.LogInfo($"Profile locked on the server until this autosave is resumed or discarded ({job.Snapshot.Manifest.Map}, {job.Snapshot.Manifest.ServerId}).");
+            }
+            finally
+            {
+                if (_job == job)
+                {
+                    _job = null;
+                }
+                _autosaving = false;
+            }
+        }
+
+        /// <summary>
+        /// The capture frame: snapshot the raid and hand it to a worker. Null when in combat or the capture failed
+        /// (the raid carries on either way).
+        /// </summary>
+        private AutosaveJob BeginAutosave(out double frameMs)
+        {
+            var frame = Stopwatch.StartNew();
+            frameMs = 0;
+            try
+            {
+                var snapshot = RaidCapture.Snapshot(Plugin.CombatWindowSeconds.Value);
+                frameMs = frame.Elapsed.TotalMilliseconds;
+                if (snapshot.Result.Report.InCombat)
+                {
+                    Plugin.Log.LogInfo((_autosavePath != null
+                        ? "Autosave skipped: in combat. The last autosave stays."
+                        : "Autosave skipped: in combat.") + $" ({frameMs:F0} ms)");
+                    return null;
+                }
+                snapshot.Manifest.AutoSave = true;
+                var path = Plugin.SavePath(snapshot.Result.ProfileId);
+                var job = new AutosaveJob { Snapshot = snapshot, Path = path, Pending = path + SnapshotFile.PendingSuffix };
+                job.Work = Task.Run(() => Work(job));
+                return job;
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogError("The autosave failed: " + e);
+                NotificationManager.DisplayWarningNotification("SPSave: the autosave failed. See the BepInEx log.");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Worker thread: only the snapshot's data, files and plain parsing; no game objects, no Unity calls, no
+        /// logging (the main thread logs the outcome).
+        /// </summary>
+        private static void Work(AutosaveJob job)
+        {
+            var watch = Stopwatch.StartNew();
+            RaidCapture.Serialize(job.Snapshot);
+            if (job.Cancelled)
+            {
+                return;
+            }
+            var report = job.Snapshot.Result.Report;
+            SnapshotFile.DiscardPending(job.Pending);
+            job.Write = SnapshotFile.Write(job.Pending, job.Snapshot.Result.Sections);
+            report.RawBytes = job.Write.RawBytes;
+            report.FileBytes = job.Write.FileBytes;
+            report.EncodeMs = job.Write.EncodeMs;
+            report.WriteMs = job.Write.WriteMs + job.Write.ReplaceMs;
+            report.VerifyFileMs = job.Write.VerifyMs;
+            var parse = Stopwatch.StartNew();
+            var readBack = SnapshotFile.Read(job.Pending);
+            report.Step("rt file read", parse.Elapsed.TotalMilliseconds);
+            parse.Restart();
+            job.Parsed = RoundTrip.ParseOffMainThread(readBack);
+            job.ParseMs = parse.Elapsed.TotalMilliseconds;
+            report.Step("rt parse (worker)", job.ParseMs);
+            job.WorkerMs = watch.Elapsed.TotalMilliseconds;
+        }
+
+        /// <summary>
+        /// An autosave that failed or didn't check out never reached raid.spsave: only its pending file goes. The last
+        /// autosave, if any, stays with its lock.
+        /// </summary>
+        private void DropPending(AutosaveJob job, string detail, string notice)
+        {
+            Plugin.Log.LogWarning(detail + (_autosavePath != null ? " The last autosave stays." : ""));
+            NotificationManager.DisplayWarningNotification(notice);
+            SnapshotFile.DiscardPending(job.Pending);
+        }
+
+        /// <summary>
+        /// The server didn't confirm the lock (no lock, no save). The checked autosave already replaced the last one,
+        /// so the save goes (Retire takes ".prev" too) and any earlier lock with it.
+        /// </summary>
+        private void DropUnlocked(AutosaveJob job)
+        {
+            Plugin.Log.LogWarning("The server didn't confirm the lock; autosave discarded. Is the SPSave server mod installed?");
+            NotificationManager.DisplayWarningNotification("SPSave: the server didn't confirm the autosave (is the SPSave server mod installed?).");
+            try
+            {
+                SnapshotFile.Retire(job.Path, DateTime.UtcNow);
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogError("Discarding the unlocked autosave failed: " + e);
+            }
+            if (_autosavePath != null)
+            {
+                _autosavePath = null;
+                LockClient.Unlock();
             }
         }
 
@@ -121,6 +422,7 @@ namespace SPSave.Game
         /// </summary>
         private void OnQuitting()
         {
+            CancelAutosave("the game is closing");
             if (Quitting || _autosavePath == null)
             {
                 return;
@@ -138,18 +440,21 @@ namespace SPSave.Game
             _autosavePath = null;
         }
 
-        /// <summary>The pause menu's SAVE &amp; QUIT.</summary>
+        /// <summary>The pause menu's SAVE &amp; QUIT. A running autosave stops first; Save &amp; Quit overwrites its file.</summary>
         internal void RequestFromMenu()
         {
-            if (!_busy)
+            if (_busy)
             {
-                SaveAndQuit(combatConfirmed: false);
+                return;
             }
+            SaveAndQuit(combatConfirmed: false);
         }
 
         private void OnDestroy()
         {
             Application.quitting -= OnQuitting;
+            // The raid is over (RaidEndPatch already stopped a running autosave); a coroutine stops with this object.
+            CancelAutosave("the raid is over");
             if (Current == this)
             {
                 Current = null;
@@ -171,7 +476,9 @@ namespace SPSave.Game
                 return;
             }
 
-            var path = CaptureWriteLock(autosave: false, combatConfirmed, out _);
+            // Also after the combat dialog: an autosave may have started while it was open. Save & Quit overwrites it.
+            CancelAutosave("Save & Quit");
+            var path = CaptureWriteLock(combatConfirmed);
             if (path == null)
             {
                 return;
@@ -185,12 +492,11 @@ namespace SPSave.Game
         /// <summary>
         /// Captures the raid, writes it, reads it back and locks the profile. Returns the save's path, or null when
         /// nothing was kept (in combat without confirmation, a failed check, no lock, an error). Save &amp; Quit asks
-        /// first in combat; an autosave skips the save instead.
+        /// first in combat. Autosaves take their own path (AutoSaveRun).
         /// </summary>
-        private string CaptureWriteLock(bool autosave, bool combatConfirmed, out bool inCombat)
+        private string CaptureWriteLock(bool combatConfirmed)
         {
-            inCombat = false;
-            var what = autosave ? "autosave" : "save";
+            const string what = "save";
             var frame = Stopwatch.StartNew();
             try
             {
@@ -198,12 +504,7 @@ namespace SPSave.Game
                 // while answering saves normally.
                 var result = RaidCapture.Run(Plugin.CombatWindowSeconds.Value);
                 var report = result.Report;
-                inCombat = report.InCombat;
-                if (report.InCombat && autosave)
-                {
-                    return null;
-                }
-                if (report.InCombat && !combatConfirmed)
+               if (report.InCombat && !combatConfirmed)
                 {
                     Plugin.Log.LogInfo("Save in combat, asking first: " + report.CombatDetail);
                     // forceShow: in a raid (InGameStatus.InRaid) ItemUiContext.method_1 skips the window and runs the
@@ -219,10 +520,6 @@ namespace SPSave.Game
                     EditManifest(result, m => m.ResolveAs = ResolveRule.SavedInCombat);
                     Plugin.Log.LogInfo("Saving in combat (confirmed): this raid will end as Killed. " + report.CombatDetail);
                 }
-                if (autosave)
-                {
-                    EditManifest(result, m => m.AutoSave = true);
-                }
 
                 var path = Plugin.SavePath(result.ProfileId);
                 var write = SnapshotFile.Write(path, result.Sections);
@@ -234,12 +531,15 @@ namespace SPSave.Game
 
                 // Read the save back: one that doesn't decode into what was captured is never kept.
                 var watch = Stopwatch.StartNew();
-                var check = RoundTrip.Verify(SnapshotFile.Read(path), result.WorldItemIds, result.WorldItems, report.Corpses);
+                var readBack = SnapshotFile.Read(path);
+                report.Step("rt file read", watch.Elapsed.TotalMilliseconds);
+                var check = RoundTrip.Verify(readBack, result.WorldItemIds, result.WorldItems, report.Corpses, report);
                 report.RoundTripMs = watch.Elapsed.TotalMilliseconds;
                 report.RoundTripOk = check.Ok;
                 report.RoundTripDetail = check.Detail;
                 report.FrameMs = frame.Elapsed.TotalMilliseconds;
-                Plugin.Log.LogInfo((autosave ? "Autosaved " : "Captured ") + report.Summary());
+                Plugin.Log.LogInfo("Captured " + report.Summary());
+                Plugin.Log.LogInfo("Save steps (ms): " + report.StepsLine());
 
                 if (!report.RoundTripOk)
                 {
@@ -247,9 +547,7 @@ namespace SPSave.Game
                     // none is left (also after Save & Quit overwrote an autosave): its lock goes too.
                     SnapshotFile.Retire(path, DateTime.UtcNow);
                     Plugin.Log.LogWarning($"Round trip failed, {what} discarded: " + report.RoundTripDetail);
-                    NotificationManager.DisplayWarningNotification(autosave
-                        ? "SPSave: the autosave didn't check out, so it was discarded."
-                        : "SPSave: the save didn't check out, so it was discarded. Your raid continues.");
+                    NotificationManager.DisplayWarningNotification("SPSave: the save didn't check out, so it was discarded. Your raid continues.");
                     if (_autosavePath != null)
                     {
                         _autosavePath = null;
@@ -259,16 +557,16 @@ namespace SPSave.Game
                 }
 
                 // The lock goes on before the game closes: without it the stash and traders could change while
-                // the save waits, and resuming would duplicate or lose gear. No lock, no save. An autosave locks
-                // too: after a crash there is no later chance.
+                // the save waits, and resuming would duplicate or lose gear. No lock, no save.
                 var manifest = ReadManifest(result);
-                if (manifest == null || !LockClient.Lock(manifest))
+                var lockWatch = Stopwatch.StartNew();
+                var locked = manifest != null && LockClient.Lock(manifest);
+                Plugin.Log.LogInfo($"Server lock call: {lockWatch.Elapsed.TotalMilliseconds:F0} ms (main thread; {frame.Elapsed.TotalMilliseconds:F0} ms in all).");
+                if (!locked)
                 {
                     SnapshotFile.Retire(path, DateTime.UtcNow);
                     Plugin.Log.LogWarning($"The server didn't confirm the lock; {what} discarded. Is the SPSave server mod installed?");
-                    NotificationManager.DisplayWarningNotification(autosave
-                        ? "SPSave: the server didn't confirm the autosave (is the SPSave server mod installed?)."
-                        : "SPSave: the server didn't confirm the save (is the SPSave server mod installed?). Your raid continues.");
+                    NotificationManager.DisplayWarningNotification("SPSave: the server didn't confirm the save (is the SPSave server mod installed?). Your raid continues.");
                     if (_autosavePath != null)
                     {
                         _autosavePath = null;
@@ -282,9 +580,7 @@ namespace SPSave.Game
             catch (Exception e)
             {
                 Plugin.Log.LogError($"The {what} failed: " + e);
-                NotificationManager.DisplayWarningNotification(autosave
-                    ? "SPSave: the autosave failed. See the BepInEx log."
-                    : "SPSave: the save failed. Your raid continues. See the BepInEx log.");
+                NotificationManager.DisplayWarningNotification("SPSave: the save failed. Your raid continues. See the BepInEx log.");
                 return null;
             }
         }
